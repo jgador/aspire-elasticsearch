@@ -50,6 +50,7 @@
   <Target Name="ReturnPackageVersion" Returns="$(PackageVersion)" />
 
   <ItemGroup>
+    <PackageReference Include="Elastic.Clients.Elasticsearch" />
     <PackageReference Include="Grpc.AspNetCore" />
     <PackageReference Include="Humanizer.Core" />
     <PackageReference Include="Microsoft.Extensions.AI" />
