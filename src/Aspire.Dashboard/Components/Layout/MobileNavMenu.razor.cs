@@ -61,6 +61,13 @@ public partial class MobileNavMenu : ComponentBase
         );
 
         yield return new MobileNavMenuEntry(
+            "Historical Logs",
+            () => NavigateToAsync("/historicallogs"),
+            DesktopNavMenu.HistoricalLogsIcon(),
+            LinkMatchRegex: GetNonIndexPageRegex("/historicallogs")
+        );
+
+        yield return new MobileNavMenuEntry(
             Loc[nameof(Resources.Layout.NavMenuTracesTab)],
             () => NavigateToAsync(DashboardUrls.TracesUrl()),
             DesktopNavMenu.TracesIcon(),
