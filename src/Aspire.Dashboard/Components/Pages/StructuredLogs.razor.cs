@@ -26,6 +26,7 @@ namespace Aspire.Dashboard.Components.Pages;
 
 public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionAndUrlState<StructuredLogs.StructuredLogsPageViewModel, StructuredLogs.StructuredLogsPageState>
 {
+    private static readonly TimeSpan s_relativeTimeRefreshInterval = TimeSpan.FromMinutes(1);
     private const string ResourceColumn = nameof(ResourceColumn);
     private const string LogLevelColumn = nameof(LogLevelColumn);
     private const string TimestampColumn = nameof(TimestampColumn);
@@ -41,6 +42,8 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
     private List<OtlpResource> _resources = default!;
     private List<SelectViewModel<ResourceTypeDetails>> _resourceViewModels = default!;
     private List<SelectViewModel<LogLevel?>> _logLevels = default!;
+    private List<SelectViewModel<int?>> _durations = default!;
+    private List<SelectViewModel<StructuredLogsTimeUnit>> _durationUnits = default!;
     private Subscription? _resourcesSubscription;
     private Subscription? _logsSubscription;
     private bool _resourceChanged;
@@ -54,10 +57,16 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
     private ColumnResizeLabels _resizeLabels = ColumnResizeLabels.Default;
     private ColumnSortLabels _sortLabels = ColumnSortLabels.Default;
     private AIContext? _aiContext;
+    private readonly string _selectDurationId = $"select-duration-{Guid.NewGuid():N}";
+    private readonly string _customDurationId = $"custom-duration-{Guid.NewGuid():N}";
+    private readonly string _selectCustomDurationUnitId = $"custom-duration-unit-{Guid.NewGuid():N}";
+    private readonly CancellationTokenSource _relativeTimeRefreshCancellation = new();
+    private string _customDurationValue = string.Empty;
 
     public string BasePath => DashboardUrls.StructuredLogsBasePath;
     public string SessionStorageKey => BrowserStorageKeys.StructuredLogsPageState;
     public StructuredLogsPageViewModel PageViewModel { get; set; } = null!;
+    public bool IsCustomDurationSelected => PageViewModel.SelectedDuration.Id is null;
 
     [Inject]
     public required TelemetryRepository TelemetryRepository { get; init; }
@@ -126,6 +135,10 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
     [Parameter]
     [SupplyParameterFromQuery]
     public long? LogEntryId { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "duration")]
+    public int? DurationMinutes { get; set; }
 
     public StructureLogsDetailsViewModel? SelectedLogEntry { get; set; }
 
@@ -213,11 +226,34 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
             new SelectViewModel<LogLevel?> { Id = LogLevel.Critical, Name = "Critical" },
         };
 
+        _durations = new List<SelectViewModel<int?>>
+        {
+            new() { Id = 15, Name = MetricsLoc[nameof(Dashboard.Resources.Metrics.MetricsLastFifteenMinutes)] },
+            new() { Id = 30, Name = MetricsLoc[nameof(Dashboard.Resources.Metrics.MetricsLastThirtyMinutes)] },
+            new() { Id = 60, Name = MetricsLoc[nameof(Dashboard.Resources.Metrics.MetricsLastHour)] },
+            new() { Id = 180, Name = MetricsLoc[nameof(Dashboard.Resources.Metrics.MetricsLastThreeHours)] },
+            new() { Id = 360, Name = MetricsLoc[nameof(Dashboard.Resources.Metrics.MetricsLastSixHours)] },
+            new() { Id = 720, Name = MetricsLoc[nameof(Dashboard.Resources.Metrics.MetricsLastTwelveHours)] },
+            new() { Id = null, Name = Loc[nameof(Dashboard.Resources.StructuredLogs.StructuredLogsCustomTimeRange)] }
+        };
+
+        _durationUnits = new List<SelectViewModel<StructuredLogsTimeUnit>>
+        {
+            new() { Id = StructuredLogsTimeUnit.Minutes, Name = Loc[nameof(Dashboard.Resources.StructuredLogs.StructuredLogsCustomTimeRangeMinutes)] },
+            new() { Id = StructuredLogsTimeUnit.Hours, Name = Loc[nameof(Dashboard.Resources.StructuredLogs.StructuredLogsCustomTimeRangeHours)] }
+        };
+
         PageViewModel = new StructuredLogsPageViewModel
         {
             SelectedLogLevel = _logLevels[0],
-            SelectedResource = _allResource
+            SelectedResource = _allResource,
+            SelectedDuration = _durations[0],
+            SelectedCustomDurationUnit = _durationUnits[0],
+            CustomDurationValue = (int)StructuredLogsViewModel.DefaultDuration.TotalMinutes
         };
+        _customDurationValue = PageViewModel.CustomDurationValue.ToString(CultureInfo.InvariantCulture);
+        ViewModel.Duration = StructuredLogsViewModel.DefaultDuration;
+        _ = Task.Run(() => RefreshRelativeTimeWindowAsync(_relativeTimeRefreshCancellation.Token));
 
         UpdateResources();
         _resourcesSubscription = TelemetryRepository.OnNewResources(() => InvokeAsync(() =>
@@ -291,6 +327,39 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
 
         await ClearSelectedLogEntryAsync();
         await this.AfterViewModelChangedAsync(_contentLayout, waitToApplyMobileChange: true);
+    }
+
+    internal async Task HandleSelectedDurationChangedAsync()
+    {
+        var previousDuration = ViewModel.Duration;
+
+        if (IsCustomDurationSelected)
+        {
+            _customDurationValue = PageViewModel.CustomDurationValue.ToString(CultureInfo.InvariantCulture);
+        }
+
+        await ApplySelectedDurationAsync(previousDuration);
+    }
+
+    internal async Task HandleCustomDurationValueChangedAsync()
+    {
+        if (!int.TryParse(_customDurationValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var customDurationValue) ||
+            customDurationValue <= 0 ||
+            !TryGetCustomDuration(customDurationValue, PageViewModel.SelectedCustomDurationUnit.Id, out _))
+        {
+            _customDurationValue = PageViewModel.CustomDurationValue.ToString(CultureInfo.InvariantCulture);
+            return;
+        }
+
+        var previousDuration = ViewModel.Duration;
+        PageViewModel.CustomDurationValue = customDurationValue;
+
+        await ApplySelectedDurationAsync(previousDuration);
+    }
+
+    internal Task HandleCustomDurationUnitChangedAsync()
+    {
+        return ApplySelectedDurationAsync(ViewModel.Duration);
     }
 
     private void UpdateSubscription()
@@ -414,6 +483,119 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
         await ClearSelectedLogEntryAsync();
     }
 
+    private async Task ApplySelectedDurationAsync(TimeSpan previousDuration)
+    {
+        var selectedDuration = GetSelectedDuration();
+        ViewModel.Duration = selectedDuration;
+
+        if (selectedDuration == previousDuration)
+        {
+            return;
+        }
+
+        _resourceChanged = true;
+
+        await ClearSelectedLogEntryAsync();
+        await this.AfterViewModelChangedAsync(_contentLayout, waitToApplyMobileChange: true);
+    }
+
+    private TimeSpan GetSelectedDuration()
+    {
+        var durationMinutes = GetSelectedDurationMinutes();
+        return TimeSpan.FromMinutes(durationMinutes);
+    }
+
+    private int GetSelectedDurationMinutes()
+    {
+        if (PageViewModel.SelectedDuration.Id is { } durationMinutes)
+        {
+            return durationMinutes;
+        }
+
+        if (TryGetCustomDuration(PageViewModel.CustomDurationValue, PageViewModel.SelectedCustomDurationUnit.Id, out var customDuration))
+        {
+            return (int)customDuration.TotalMinutes;
+        }
+
+        return (int)StructuredLogsViewModel.DefaultDuration.TotalMinutes;
+    }
+
+    private void SetSelectedDurationFromMinutes(int? durationMinutes)
+    {
+        var resolvedDurationMinutes = durationMinutes.GetValueOrDefault((int)StructuredLogsViewModel.DefaultDuration.TotalMinutes);
+        if (resolvedDurationMinutes <= 0)
+        {
+            resolvedDurationMinutes = (int)StructuredLogsViewModel.DefaultDuration.TotalMinutes;
+        }
+
+        if (_durations.SingleOrDefault(d => d.Id == resolvedDurationMinutes) is { } selectedPreset)
+        {
+            PageViewModel.SelectedDuration = selectedPreset;
+            PageViewModel.CustomDurationValue = resolvedDurationMinutes;
+            PageViewModel.SelectedCustomDurationUnit = _durationUnits[0];
+        }
+        else
+        {
+            PageViewModel.SelectedDuration = _durations.Single(d => d.Id is null);
+
+            if (resolvedDurationMinutes % 60 == 0)
+            {
+                PageViewModel.CustomDurationValue = resolvedDurationMinutes / 60;
+                PageViewModel.SelectedCustomDurationUnit = _durationUnits.Single(u => u.Id == StructuredLogsTimeUnit.Hours);
+            }
+            else
+            {
+                PageViewModel.CustomDurationValue = resolvedDurationMinutes;
+                PageViewModel.SelectedCustomDurationUnit = _durationUnits[0];
+            }
+        }
+
+        _customDurationValue = PageViewModel.CustomDurationValue.ToString(CultureInfo.InvariantCulture);
+        ViewModel.Duration = GetSelectedDuration();
+    }
+
+    private static bool TryGetCustomDuration(int value, StructuredLogsTimeUnit unit, out TimeSpan duration)
+    {
+        try
+        {
+            duration = unit switch
+            {
+                StructuredLogsTimeUnit.Hours => TimeSpan.FromHours(value),
+                _ => TimeSpan.FromMinutes(value)
+            };
+
+            return value > 0;
+        }
+        catch (OverflowException)
+        {
+            duration = default;
+            return false;
+        }
+    }
+
+    private async Task RefreshRelativeTimeWindowAsync(CancellationToken cancellationToken)
+    {
+        using var timer = new PeriodicTimer(s_relativeTimeRefreshInterval);
+
+        try
+        {
+            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                ViewModel.ClearData();
+
+                if (_dataGrid is null)
+                {
+                    continue;
+                }
+
+                await InvokeAsync(_dataGrid.SafeRefreshDataAsync);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
     private string GetResourceName(OtlpResourceView app) => OtlpHelpers.GetResourceName(app.Resource, _resources);
 
     private string GetRowClass(OtlpLogEntry entry)
@@ -478,6 +660,8 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
 
     public void Dispose()
     {
+        _relativeTimeRefreshCancellation.Cancel();
+        _relativeTimeRefreshCancellation.Dispose();
         _aiContext?.Dispose();
         _resourcesSubscription?.Dispose();
         _logsSubscription?.Dispose();
@@ -492,7 +676,8 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
         var url = DashboardUrls.StructuredLogsUrl(
             resource: serializable.SelectedResource,
             logLevel: serializable.LogLevelText,
-            filters: filters);
+            filters: filters,
+            duration: serializable.DurationMinutes);
 
         return url;
     }
@@ -502,6 +687,7 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
         return new StructuredLogsPageState
         {
             LogLevelText = PageViewModel.SelectedLogLevel.Id?.ToString().ToLowerInvariant(),
+            DurationMinutes = GetSelectedDurationMinutes(),
             SelectedResource = PageViewModel.SelectedResource.Id is not null ? PageViewModel.SelectedResource.Name : null,
             Filters = ViewModel.Filters
         };
@@ -522,6 +708,7 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
         }
 
         ViewModel.LogLevel = PageViewModel.SelectedLogLevel.Id;
+        SetSelectedDurationFromMinutes(DurationMinutes);
 
         if (SerializedFilters is not null)
         {
@@ -610,13 +797,23 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
     {
         public required SelectViewModel<ResourceTypeDetails> SelectedResource { get; set; }
         public SelectViewModel<LogLevel?> SelectedLogLevel { get; set; } = default!;
+        public SelectViewModel<int?> SelectedDuration { get; set; } = default!;
+        public SelectViewModel<StructuredLogsTimeUnit> SelectedCustomDurationUnit { get; set; } = default!;
+        public int CustomDurationValue { get; set; }
     }
 
     public class StructuredLogsPageState
     {
         public string? SelectedResource { get; set; }
         public string? LogLevelText { get; set; }
+        public int DurationMinutes { get; set; }
         public required IReadOnlyCollection<FieldTelemetryFilter> Filters { get; set; }
+    }
+
+    public enum StructuredLogsTimeUnit
+    {
+        Minutes,
+        Hours
     }
 
     // IComponentWithTelemetry impl

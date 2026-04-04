@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using Aspire.Dashboard.Model.GenAI;
 using Aspire.Dashboard.Model.Otlp;
 using Aspire.Dashboard.Otlp.Model;
@@ -12,6 +13,7 @@ namespace Aspire.Dashboard.Model;
 public class StructuredLogsViewModel
 {
     private readonly TelemetryRepository _telemetryRepository;
+    private readonly BrowserTimeProvider _timeProvider;
     private readonly List<FieldTelemetryFilter> _filters = new();
     // Cache span lookups for GenAI attributes to avoid repeated lookups.
     private readonly ConcurrentDictionary<SpanKey, bool> _spanGenAICache = new();
@@ -22,11 +24,15 @@ public class StructuredLogsViewModel
     private int _logsStartIndex;
     private int _logsCount;
     private LogLevel? _logLevel;
+    private TimeSpan _duration = DefaultDuration;
     private bool _currentDataHasErrors;
 
-    public StructuredLogsViewModel(TelemetryRepository telemetryRepository)
+    public static readonly TimeSpan DefaultDuration = TimeSpan.FromMinutes(15);
+
+    public StructuredLogsViewModel(TelemetryRepository telemetryRepository, BrowserTimeProvider timeProvider)
     {
         _telemetryRepository = telemetryRepository;
+        _timeProvider = timeProvider;
     }
 
     public ResourceKey? ResourceKey { get => _resourceKey; set => SetValue(ref _resourceKey, value); }
@@ -94,6 +100,7 @@ public class StructuredLogsViewModel
     public int StartIndex { get => _logsStartIndex; set => SetValue(ref _logsStartIndex, value); }
     public int Count { get => _logsCount; set => SetValue(ref _logsCount, value); }
     public LogLevel? LogLevel { get => _logLevel; set => SetValue(ref _logLevel, value); }
+    public TimeSpan Duration { get => _duration; set => SetValue(ref _duration, value); }
 
     private void SetValue<T>(ref T field, T value)
     {
@@ -130,6 +137,14 @@ public class StructuredLogsViewModel
     public List<TelemetryFilter> GetFilters()
     {
         var filters = Filters.Cast<TelemetryFilter>().ToList();
+        var cutoff = _timeProvider.GetUtcNow().UtcDateTime.Subtract(Duration);
+        filters.Add(new FieldTelemetryFilter
+        {
+            Field = nameof(OtlpLogEntry.TimeStamp),
+            Condition = FilterCondition.GreaterThanOrEqual,
+            Value = cutoff.ToString("O", CultureInfo.InvariantCulture)
+        });
+
         if (!string.IsNullOrWhiteSpace(FilterText))
         {
             filters.Add(new FieldTelemetryFilter { Field = nameof(OtlpLogEntry.Message), Condition = FilterCondition.Contains, Value = FilterText });

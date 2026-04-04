@@ -7,6 +7,7 @@
 @implements IDisposable
 
 @inject IStringLocalizer<Dashboard.Resources.StructuredLogs> Loc
+@inject IStringLocalizer<Dashboard.Resources.Metrics> MetricsLoc
 @inject IStringLocalizer<ControlsStrings> ControlsStringsLoc
 @inject IStringLocalizer<StructuredFiltering> FilterLoc
 @inject IStringLocalizer<Dialogs> DialogsLoc
@@ -54,6 +55,58 @@
                             @bind-LogLevel="@PageViewModel.SelectedLogLevel"
                             LogLevels="@_logLevels"
                             HandleSelectedLogLevelChangedAsync="@HandleSelectedLogLevelChangedAsync" />
+
+            <DesktopToolbarDivider />
+
+            @if (ViewportInformation.IsDesktop)
+            {
+                <FluentInputLabel slot="end"
+                                  Label="@Loc[nameof(Dashboard.Resources.StructuredLogs.StructuredLogsTimeRange)]"
+                                  ForId="@_selectDurationId"
+                                  Orientation="Orientation.Horizontal" />
+
+                <DesktopToolbarDivider />
+            }
+
+            <FluentSelect slot="end"
+                          TOption="SelectViewModel<int?>"
+                          Id="@_selectDurationId"
+                          Items="@_durations"
+                          Position="SelectPosition.Below"
+                          OptionText="@(c => c.Name)"
+                          @bind-SelectedOption="PageViewModel.SelectedDuration"
+                          @bind-SelectedOption:after="HandleSelectedDurationChangedAsync"
+                          Label="@(ViewportInformation.IsDesktop ? string.Empty : Loc[nameof(Dashboard.Resources.StructuredLogs.StructuredLogsTimeRange)].Value)"
+                          Width="160px"
+                          Style="min-width: auto;"
+                          AriaLabel="@Loc[nameof(Dashboard.Resources.StructuredLogs.StructuredLogsSelectTimeRange)]" />
+
+            @if (IsCustomDurationSelected)
+            {
+                <DesktopToolbarDivider />
+
+                <FluentTextField slot="end"
+                                 Id="@_customDurationId"
+                                 @bind-Value="_customDurationValue"
+                                 @bind-Value:after="HandleCustomDurationValueChangedAsync"
+                                 Placeholder="15"
+                                 Style="width: 80px;"
+                                 aria-label="@Loc[nameof(Dashboard.Resources.StructuredLogs.StructuredLogsCustomTimeRangeValue)]" />
+
+                <DesktopToolbarDivider />
+
+                <FluentSelect slot="end"
+                              TOption="SelectViewModel<StructuredLogsTimeUnit>"
+                              Id="@_selectCustomDurationUnitId"
+                              Items="@_durationUnits"
+                              Position="SelectPosition.Below"
+                              OptionText="@(c => c.Name)"
+                              @bind-SelectedOption="PageViewModel.SelectedCustomDurationUnit"
+                              @bind-SelectedOption:after="HandleCustomDurationUnitChangedAsync"
+                              Width="120px"
+                              Style="min-width: auto;"
+                              AriaLabel="@Loc[nameof(Dashboard.Resources.StructuredLogs.StructuredLogsCustomTimeRangeUnit)]" />
+            }
 
             <DesktopToolbarDivider />
 

@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System.Globalization;
 using Aspire.Dashboard.Components.Pages;
 using Aspire.Dashboard.Components.Resize;
 using Aspire.Dashboard.Components.Tests.Shared;
@@ -198,6 +199,131 @@ public partial class StructuredLogsTests : DashboardTestContext
             });
     }
 
+    [Fact]
+    public void Render_NoDuration_DefaultsToLastFifteenMinutes()
+    {
+        SetupStructureLogsServices();
+
+        var viewport = new ViewportInformation(IsDesktop: true, IsUltraLowHeight: false, IsUltraLowWidth: false);
+        var dimensionManager = Services.GetRequiredService<DimensionManager>();
+        dimensionManager.InvokeOnViewportInformationChanged(viewport);
+
+        var cut = RenderComponent<StructuredLogs>(builder =>
+        {
+            builder.Add(p => p.ViewportInformation, viewport);
+        });
+
+        var viewModel = Services.GetRequiredService<StructuredLogsViewModel>();
+
+        Assert.Equal(15, cut.Instance.PageViewModel.SelectedDuration.Id);
+        Assert.Equal(StructuredLogsViewModel.DefaultDuration, viewModel.Duration);
+        Assert.Equal("/structuredlogs?duration=15", cut.Instance.GetUrlFromSerializableViewModel(cut.Instance.ConvertViewModelToSerializable()));
+    }
+
+    [Fact]
+    public void Render_CustomDurationInQuery_CustomTimeRangeSelected()
+    {
+        SetupStructureLogsServices();
+
+        var navigationManager = Services.GetRequiredService<NavigationManager>();
+        var uri = navigationManager.ToAbsoluteUri(DashboardUrls.StructuredLogsUrl(duration: 90));
+        navigationManager.NavigateTo(uri.OriginalString);
+
+        var viewport = new ViewportInformation(IsDesktop: true, IsUltraLowHeight: false, IsUltraLowWidth: false);
+        var dimensionManager = Services.GetRequiredService<DimensionManager>();
+        dimensionManager.InvokeOnViewportInformationChanged(viewport);
+
+        var cut = RenderComponent<StructuredLogs>(builder =>
+        {
+            builder.Add(p => p.ViewportInformation, viewport);
+        });
+
+        var viewModel = Services.GetRequiredService<StructuredLogsViewModel>();
+
+        Assert.Null(cut.Instance.PageViewModel.SelectedDuration.Id);
+        Assert.Equal(90, cut.Instance.PageViewModel.CustomDurationValue);
+        Assert.Equal(StructuredLogs.StructuredLogsTimeUnit.Minutes, cut.Instance.PageViewModel.SelectedCustomDurationUnit.Id);
+        Assert.Equal(TimeSpan.FromMinutes(90), viewModel.Duration);
+        Assert.Equal("/structuredlogs?duration=90", cut.Instance.GetUrlFromSerializableViewModel(cut.Instance.ConvertViewModelToSerializable()));
+    }
+
+    [Fact]
+    public void GetFilters_DurationConfigured_AddsTimestampCutoffFilter()
+    {
+        SetupStructureLogsServices();
+
+        var timeProvider = (TestTimeProvider)Services.GetRequiredService<BrowserTimeProvider>();
+        timeProvider.UtcNow = new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero);
+
+        var viewModel = Services.GetRequiredService<StructuredLogsViewModel>();
+        viewModel.Duration = TimeSpan.FromMinutes(30);
+
+        var timestampFilter = Assert.Single(viewModel.GetFilters().OfType<FieldTelemetryFilter>(), f => f.Field == nameof(OtlpLogEntry.TimeStamp));
+
+        Assert.Equal(FilterCondition.GreaterThanOrEqual, timestampFilter.Condition);
+        Assert.Equal(
+            timeProvider.UtcNow.UtcDateTime.Subtract(TimeSpan.FromMinutes(30)),
+            DateTime.Parse(timestampFilter.Value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
+    }
+
+    [Fact]
+    public async Task HandleSelectedDurationChanged_ClearsSelectedLogEntry()
+    {
+        SetupStructureLogsServices();
+
+        var telemetryRepository = Services.GetRequiredService<TelemetryRepository>();
+        telemetryRepository.AddLogs(new AddContext(), new RepeatedField<ResourceLogs>
+        {
+            new ResourceLogs
+            {
+                Resource = CreateResource(name: "TestApp"),
+                ScopeLogs =
+                {
+                    new ScopeLogs
+                    {
+                        Scope = CreateScope(name: "test-scope"),
+                        LogRecords =
+                        {
+                            CreateLogRecord()
+                        }
+                    }
+                }
+            }
+        });
+
+        var viewport = new ViewportInformation(IsDesktop: true, IsUltraLowHeight: false, IsUltraLowWidth: false);
+        var dimensionManager = Services.GetRequiredService<DimensionManager>();
+        dimensionManager.InvokeOnViewportInformationChanged(viewport);
+
+        var cut = RenderComponent<StructuredLogs>(builder =>
+        {
+            builder.Add(p => p.ViewportInformation, viewport);
+        });
+
+        var logEntry = telemetryRepository.GetLogs(new GetLogsContext
+        {
+            ResourceKey = null,
+            StartIndex = 0,
+            Count = 1,
+            Filters = []
+        }).Items.Single();
+
+        cut.Instance.SelectedLogEntry = new StructureLogsDetailsViewModel
+        {
+            LogEntry = logEntry
+        };
+        cut.Instance.PageViewModel.SelectedDuration = new SelectViewModel<int?> { Id = 30, Name = "Last 30 minutes" };
+
+        await cut.InvokeAsync(cut.Instance.HandleSelectedDurationChangedAsync);
+
+        var navigationManager = Services.GetRequiredService<NavigationManager>();
+        var viewModel = Services.GetRequiredService<StructuredLogsViewModel>();
+
+        Assert.Null(cut.Instance.SelectedLogEntry);
+        Assert.Equal(TimeSpan.FromMinutes(30), viewModel.Duration);
+        Assert.Equal("/structuredlogs?duration=30", new Uri(navigationManager.Uri).PathAndQuery);
+    }
+
     private void SetupStructureLogsServices()
     {
         FluentUISetupHelpers.SetupFluentDivider(this);
@@ -209,8 +335,10 @@ public partial class StructuredLogsTests : DashboardTestContext
         FluentUISetupHelpers.SetupFluentMenu(this);
         FluentUISetupHelpers.SetupFluentToolbar(this);
         FluentUISetupHelpers.SetupFluentAnchoredRegion(this);
+        FluentUISetupHelpers.SetupFluentTextField(this);
 
         JSInterop.SetupVoid("initializeContinuousScroll");
+        JSInterop.SetupVoid("resetContinuousScrollPosition");
 
         FluentUISetupHelpers.AddCommonDashboardServices(this);
         Services.AddSingleton<ILogger<StructuredLogs>>(NullLogger<StructuredLogs>.Instance);

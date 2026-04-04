@@ -82,7 +82,7 @@ internal static class DashboardUrls
         return url;
     }
 
-    public static string StructuredLogsUrl(string? resource = null, string? logLevel = null, string? filters = null, string? traceId = null, string? spanId = null, long? logEntryId = null)
+    public static string StructuredLogsUrl(string? resource = null, string? logLevel = null, string? filters = null, string? traceId = null, string? spanId = null, long? logEntryId = null, int? duration = null)
     {
         var url = $"/{StructuredLogsBasePath}";
         if (resource != null)
@@ -111,6 +111,10 @@ internal static class DashboardUrls
         if (logEntryId != null)
         {
             url = AddQueryString(url, "logEntryId", logEntryId.Value.ToString(CultureInfo.InvariantCulture));
+        }
+        if (duration != null)
+        {
+            url = AddQueryString(url, "duration", duration.Value.ToString(CultureInfo.InvariantCulture));
         }
 
         return url;
