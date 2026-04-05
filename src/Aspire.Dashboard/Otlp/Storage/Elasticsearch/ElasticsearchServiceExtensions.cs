@@ -38,7 +38,6 @@ internal static class ElasticsearchServiceExtensions
         });
 
         services.AddSingleton<ElasticsearchDataStreamSetup>();
-        services.AddSingleton<ElasticsearchLogQueryService>();
         services.AddHostedService<ElasticsearchLogPersistenceService>();
 
         return services;

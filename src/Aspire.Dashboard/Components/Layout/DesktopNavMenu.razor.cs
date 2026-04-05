@@ -23,10 +23,6 @@ public partial class DesktopNavMenu : ComponentBase, IDisposable
         active ? new Icons.Filled.Size24.SlideTextSparkle()
                   : new Icons.Regular.Size24.SlideTextSparkle();
 
-    internal static Icon HistoricalLogsIcon(bool active = false) =>
-        active ? new Icons.Filled.Size24.History()
-                  : new Icons.Regular.Size24.History();
-
     internal static Icon TracesIcon(bool active = false) =>
         active ? new Icons.Filled.Size24.GanttChart()
                   : new Icons.Regular.Size24.GanttChart();
