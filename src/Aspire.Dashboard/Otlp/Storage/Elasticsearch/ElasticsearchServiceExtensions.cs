@@ -8,14 +8,14 @@ using Microsoft.Extensions.Options;
 namespace Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 
 /// <summary>
-/// Extension methods for registering Elasticsearch log persistence services.
+/// Extension methods for registering Elasticsearch log persistence and read services.
 /// </summary>
 internal static class ElasticsearchServiceExtensions
 {
     private const string ConfigSectionPath = "Dashboard:Elasticsearch";
 
     /// <summary>
-    /// Registers Elasticsearch log persistence services if enabled in configuration.
+    /// Registers Elasticsearch log persistence and read services if enabled in configuration.
     /// </summary>
     public static IServiceCollection AddElasticsearchLogPersistence(
         this IServiceCollection services,
@@ -38,6 +38,8 @@ internal static class ElasticsearchServiceExtensions
         });
 
         services.AddSingleton<ElasticsearchDataStreamSetup>();
+        services.AddSingleton<ElasticsearchLogReader>();
+        services.AddSingleton<ElasticsearchLogsService>();
         services.AddHostedService<ElasticsearchLogPersistenceService>();
 
         return services;

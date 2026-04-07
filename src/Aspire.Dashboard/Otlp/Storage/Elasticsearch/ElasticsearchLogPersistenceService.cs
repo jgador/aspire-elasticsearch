@@ -71,7 +71,7 @@ internal sealed class ElasticsearchLogPersistenceService : BackgroundService
 
             await foreach (var logEntry in logStream.ConfigureAwait(false))
             {
-                var document = ElasticsearchDocumentMapper.ToDocument(logEntry);
+                var document = ElasticsearchLogMapper.ToDocument(logEntry);
                 batch.Add(document);
 
                 if (batch.Count >= _options.BatchSize)

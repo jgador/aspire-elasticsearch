@@ -5,6 +5,7 @@ using Aspire.Dashboard.Configuration;
 using Aspire.Dashboard.Otlp.Model;
 using Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 using Google.Protobuf.Collections;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenTelemetry.Proto.Common.V1;
 using OpenTelemetry.Proto.Logs.V1;
@@ -13,7 +14,7 @@ using static Aspire.Tests.Shared.Telemetry.TelemetryTestHelpers;
 
 namespace Aspire.Dashboard.Tests.Elasticsearch;
 
-public class ElasticsearchDocumentMapperTests
+public class ElasticsearchLogMapperTests
 {
     private static readonly DateTime s_testTime = new(2024, 6, 15, 10, 30, 0, DateTimeKind.Utc);
 
@@ -27,7 +28,7 @@ public class ElasticsearchDocumentMapperTests
             severity: SeverityNumber.Warn);
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert
         Assert.Equal(s_testTime, doc.Timestamp);
@@ -45,7 +46,7 @@ public class ElasticsearchDocumentMapperTests
             resourceInstanceId: "instance-1");
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert
         Assert.Equal("MyService", doc.ServiceName);
@@ -59,7 +60,7 @@ public class ElasticsearchDocumentMapperTests
         var logEntry = CreateTestLogEntry(scopeName: "MyApp.Services.OrderService");
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert
         Assert.Equal("MyApp.Services.OrderService", doc.LoggerName);
@@ -73,7 +74,7 @@ public class ElasticsearchDocumentMapperTests
         var logEntry = CreateTestLogEntry(traceId: "abc123", spanId: "def456");
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert
         Assert.Equal("616263313233", doc.TraceId);
@@ -97,7 +98,7 @@ public class ElasticsearchDocumentMapperTests
             attributes: exceptionAttributes);
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert
         Assert.Equal("System.InvalidOperationException", doc.ErrorType);
@@ -119,7 +120,7 @@ public class ElasticsearchDocumentMapperTests
         var logEntry = CreateTestLogEntry(attributes: attributes);
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert
         Assert.NotNull(doc.Labels);
@@ -135,7 +136,7 @@ public class ElasticsearchDocumentMapperTests
             attributes: [new("{OriginalFormat}", "Simple message")]);
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert — OriginalFormat is filtered out by OtlpLogEntry constructor, so no labels
         Assert.Null(doc.Labels);
@@ -148,7 +149,7 @@ public class ElasticsearchDocumentMapperTests
         var logEntry = CreateTestLogEntry(eventName: "OrderCreated");
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert
         Assert.Equal("OrderCreated", doc.EventName);
@@ -167,7 +168,7 @@ public class ElasticsearchDocumentMapperTests
         var logEntry = CreateTestLogEntry(attributes: attributes);
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert
         Assert.Equal("Processing order {OrderId}", doc.OriginalFormat);
@@ -186,11 +187,141 @@ public class ElasticsearchDocumentMapperTests
         var logEntry = CreateTestLogEntry(severity: severity);
 
         // Act
-        var doc = ElasticsearchDocumentMapper.ToDocument(logEntry);
+        var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
         // Assert
         Assert.Equal(expectedLevel, doc.LogLevel);
         Assert.Equal((int)severity, doc.SeverityNumber);
+    }
+
+    [Fact]
+    public void ToLogEntry_MapsBasicFields()
+    {
+        // Arrange
+        var document = new ElasticsearchLogDocument
+        {
+            Timestamp = s_testTime,
+            Message = "Hello from Elasticsearch",
+            LogLevel = "Warning",
+            SeverityNumber = (int)SeverityNumber.Warn,
+            LoggerName = "MyApp.Logger",
+            TraceId = GetHexId("trace-1"),
+            SpanId = GetHexId("span-1"),
+            ParentId = "parent-1",
+            ServiceName = "MyService",
+            ServiceInstanceId = "instance-1",
+            EventName = "OrderCreated",
+            OriginalFormat = "Order {OrderId} created",
+            Flags = 123
+        };
+        var mapper = CreateMapper();
+
+        // Act
+        var logEntry = mapper.ToLogEntry(document);
+
+        // Assert
+        Assert.Equal(s_testTime, logEntry.TimeStamp);
+        Assert.Equal("Hello from Elasticsearch", logEntry.Message);
+        Assert.Equal(LogLevel.Warning, logEntry.Severity);
+        Assert.Equal((int)SeverityNumber.Warn, logEntry.SeverityNumber);
+        Assert.Equal("MyApp.Logger", logEntry.Scope.Name);
+        Assert.Equal(GetHexId("trace-1"), logEntry.TraceId);
+        Assert.Equal(GetHexId("span-1"), logEntry.SpanId);
+        Assert.Equal("parent-1", logEntry.ParentId);
+        Assert.Equal("MyService", logEntry.ResourceView.Resource.ResourceName);
+        Assert.Equal("instance-1", logEntry.ResourceView.ResourceKey.InstanceId);
+        Assert.Equal("OrderCreated", logEntry.EventName);
+        Assert.Equal("Order {OrderId} created", logEntry.OriginalFormat);
+        Assert.Equal((uint)123, logEntry.Flags);
+    }
+
+    [Fact]
+    public void ToLogEntry_MapsExceptionFieldsAndLabelsToAttributes()
+    {
+        // Arrange
+        var document = new ElasticsearchLogDocument
+        {
+            Timestamp = s_testTime,
+            Message = "boom",
+            LogLevel = "Error",
+            SeverityNumber = (int)SeverityNumber.Error,
+            ServiceName = "MyService",
+            ErrorType = "System.InvalidOperationException",
+            ErrorMessage = "Operation failed",
+            ErrorStackTrace = "at MyApp.Method()",
+            Labels = new Dictionary<string, string>
+            {
+                ["OrderId"] = "123",
+                ["CustomerId"] = "cust-99"
+            }
+        };
+        var mapper = CreateMapper();
+
+        // Act
+        var logEntry = mapper.ToLogEntry(document);
+
+        // Assert
+        Assert.Contains(logEntry.Attributes, a => a.Key == OtlpLogEntry.ExceptionTypeField && a.Value == "System.InvalidOperationException");
+        Assert.Contains(logEntry.Attributes, a => a.Key == OtlpLogEntry.ExceptionMessageField && a.Value == "Operation failed");
+        Assert.Contains(logEntry.Attributes, a => a.Key == OtlpLogEntry.ExceptionStackTraceField && a.Value == "at MyApp.Method()");
+        Assert.Contains(logEntry.Attributes, a => a.Key == "OrderId" && a.Value == "123");
+        Assert.Contains(logEntry.Attributes, a => a.Key == "CustomerId" && a.Value == "cust-99");
+    }
+
+    [Fact]
+    public void ToLogEntry_FallsBackToSeverityNumberWhenLogLevelCannotBeParsed()
+    {
+        // Arrange
+        var document = new ElasticsearchLogDocument
+        {
+            Timestamp = s_testTime,
+            Message = "fallback severity",
+            LogLevel = "not-a-level",
+            SeverityNumber = 17,
+            ServiceName = "MyService"
+        };
+        var mapper = CreateMapper();
+
+        // Act
+        var logEntry = mapper.ToLogEntry(document);
+
+        // Assert
+        Assert.Equal(LogLevel.Error, logEntry.Severity);
+    }
+
+    [Fact]
+    public void ToLogEntry_ReusesResourceViewAndScopeForRepeatedValues()
+    {
+        // Arrange
+        var mapper = CreateMapper();
+        var first = new ElasticsearchLogDocument
+        {
+            Timestamp = s_testTime,
+            Message = "first",
+            LogLevel = "Information",
+            SeverityNumber = (int)SeverityNumber.Info,
+            LoggerName = "SharedLogger",
+            ServiceName = "SharedService",
+            ServiceInstanceId = "instance-1"
+        };
+        var second = new ElasticsearchLogDocument
+        {
+            Timestamp = s_testTime.AddSeconds(1),
+            Message = "second",
+            LogLevel = "Information",
+            SeverityNumber = (int)SeverityNumber.Info,
+            LoggerName = "SharedLogger",
+            ServiceName = "SharedService",
+            ServiceInstanceId = "instance-1"
+        };
+
+        // Act
+        var firstLogEntry = mapper.ToLogEntry(first);
+        var secondLogEntry = mapper.ToLogEntry(second);
+
+        // Assert
+        Assert.Same(firstLogEntry.ResourceView, secondLogEntry.ResourceView);
+        Assert.Same(firstLogEntry.Scope, secondLogEntry.Scope);
     }
 
     private static OtlpLogEntry CreateTestLogEntry(
@@ -229,5 +360,16 @@ public class ElasticsearchDocumentMapperTests
             eventName: eventName);
 
         return new OtlpLogEntry(logRecord, resourceView, scope, context);
+    }
+
+    private static ElasticsearchLogMapper CreateMapper()
+    {
+        var context = new OtlpContext
+        {
+            Logger = NullLogger.Instance,
+            Options = new TelemetryLimitOptions()
+        };
+
+        return new ElasticsearchLogMapper(context);
     }
 }

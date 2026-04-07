@@ -51,10 +51,10 @@ internal sealed class ElasticsearchDataStreamSetup
                         .Date("@timestamp", new DateProperty())
                         .Keyword("log.level", new KeywordProperty())
                         .IntegerNumber("log.severity_number", new IntegerNumberProperty())
-                        .Text("log.logger", new TextProperty())
-                        .Text("log.original_format", new TextProperty())
+                        .Text("log.logger", CreateTextWithKeywordProperty())
+                        .Text("log.original_format", CreateTextWithKeywordProperty())
                         .IntegerNumber("log.flags", new IntegerNumberProperty())
-                        .Text("message", new TextProperty())
+                        .Text("message", CreateTextWithKeywordProperty())
                         .Keyword("trace.id", new KeywordProperty())
                         .Keyword("span.id", new KeywordProperty())
                         .Keyword("parent.id", new KeywordProperty())
@@ -62,8 +62,8 @@ internal sealed class ElasticsearchDataStreamSetup
                         .Keyword("service.instance.id", new KeywordProperty())
                         .Keyword("event.name", new KeywordProperty())
                         .Keyword("error.type", new KeywordProperty())
-                        .Text("error.message", new TextProperty())
-                        .Text("error.stack_trace", new TextProperty())
+                        .Text("error.message", CreateTextWithKeywordProperty())
+                        .Text("error.stack_trace", CreateTextWithKeywordProperty())
                         .Object("labels", new ObjectProperty())
                     )
                 )
@@ -77,5 +77,19 @@ internal sealed class ElasticsearchDataStreamSetup
         }
 
         _logger.LogInformation("Elasticsearch index template '{TemplateName}' is ready.", templateName);
+    }
+
+    private static TextProperty CreateTextWithKeywordProperty()
+    {
+        return new TextProperty
+        {
+            Fields = new Properties
+            {
+                ["keyword"] = new KeywordProperty
+                {
+                    IgnoreAbove = short.MaxValue
+                }
+            }
+        };
     }
 }
