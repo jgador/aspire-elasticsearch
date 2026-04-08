@@ -12,8 +12,6 @@ namespace Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 /// </summary>
 internal static class ElasticsearchServiceExtensions
 {
-    private const string ConfigSectionPath = "Dashboard:Elasticsearch";
-
     /// <summary>
     /// Registers Elasticsearch log persistence and read services if enabled in configuration.
     /// </summary>
@@ -21,15 +19,15 @@ internal static class ElasticsearchServiceExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        var section = configuration.GetSection(ConfigSectionPath);
-        var enabled = section.GetValue<bool>(nameof(ElasticsearchOptions.Enabled));
+        var section = configuration.GetSection(ElasticsearchConfigNames.SectionPath);
 
-        if (!enabled)
+        if (!ElasticsearchConfigNames.IsEnabled(configuration))
         {
             return services;
         }
 
         services.Configure<ElasticsearchOptions>(section);
+        services.PostConfigure<ElasticsearchOptions>(options => ApplyAliasedConfiguration(configuration, options));
 
         services.AddSingleton(sp =>
         {
@@ -51,8 +49,8 @@ internal static class ElasticsearchServiceExtensions
         {
             throw new InvalidOperationException(
                 "Elasticsearch endpoint must be configured when Elasticsearch log persistence is enabled. " +
-                $"Set the '{ConfigSectionPath}:{nameof(ElasticsearchOptions.Endpoint)}' configuration value " +
-                $"or the 'Dashboard__Elasticsearch__{nameof(ElasticsearchOptions.Endpoint)}' environment variable.");
+                $"Set the '{ElasticsearchConfigNames.EndpointKey}' configuration value " +
+                $"or the '{ElasticsearchConfigNames.EndpointEnvVarName}' environment variable.");
         }
 
         var settings = new ElasticsearchClientSettings(new Uri(options.Endpoint));
@@ -67,5 +65,58 @@ internal static class ElasticsearchServiceExtensions
         }
 
         return new ElasticsearchClient(settings);
+    }
+
+    private static void ApplyAliasedConfiguration(IConfiguration configuration, ElasticsearchOptions options)
+    {
+        if (GetBoolValue(configuration, ElasticsearchConfigNames.EnabledEnvVarName) is { } enabled)
+        {
+            options.Enabled = enabled;
+        }
+
+        if (configuration[ElasticsearchConfigNames.EndpointEnvVarName] is { Length: > 0 } endpoint)
+        {
+            options.Endpoint = endpoint;
+        }
+
+        if (configuration[ElasticsearchConfigNames.DataStreamNameEnvVarName] is { Length: > 0 } dataStreamName)
+        {
+            options.DataStreamName = dataStreamName;
+        }
+
+        if (GetIntValue(configuration, ElasticsearchConfigNames.BatchSizeEnvVarName) is { } batchSize)
+        {
+            options.BatchSize = batchSize;
+        }
+
+        if (GetIntValue(configuration, ElasticsearchConfigNames.FlushIntervalSecondsEnvVarName) is { } flushIntervalSeconds)
+        {
+            options.FlushIntervalSeconds = flushIntervalSeconds;
+        }
+
+        if (configuration[ElasticsearchConfigNames.ApiKeyEnvVarName] is { Length: > 0 } apiKey)
+        {
+            options.ApiKey = apiKey;
+        }
+
+        if (configuration[ElasticsearchConfigNames.UsernameEnvVarName] is { Length: > 0 } username)
+        {
+            options.Username = username;
+        }
+
+        if (configuration[ElasticsearchConfigNames.PasswordEnvVarName] is { Length: > 0 } password)
+        {
+            options.Password = password;
+        }
+    }
+
+    private static bool? GetBoolValue(IConfiguration configuration, string key)
+    {
+        return configuration.GetValue<bool?>(key);
+    }
+
+    private static int? GetIntValue(IConfiguration configuration, string key)
+    {
+        return configuration.GetValue<int?>(key);
     }
 }

@@ -8,14 +8,9 @@ namespace Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 
 internal static class ElasticsearchEndpointsBuilder
 {
-    private const string ConfigSectionPath = "Dashboard:Elasticsearch";
-
     public static void MapElasticsearchApi(this IEndpointRouteBuilder endpoints, IConfiguration configuration)
     {
-        var section = configuration.GetSection(ConfigSectionPath);
-        var enabled = section.GetValue<bool>(nameof(ElasticsearchOptions.Enabled));
-
-        if (!enabled)
+        if (!ElasticsearchConfigNames.IsEnabled(configuration))
         {
             endpoints.MapPostNotFound("/api/elasticsearch/{*path}").SkipStatusCodePages();
             return;

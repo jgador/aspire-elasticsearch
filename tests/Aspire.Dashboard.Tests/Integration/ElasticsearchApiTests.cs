@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Net;
+using Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 using Microsoft.AspNetCore.InternalTesting;
 using Xunit;
 
@@ -30,12 +31,12 @@ public class ElasticsearchApiTests
     }
 
     [Fact]
-    public async Task PostSetup_WhenElasticsearchSetupFails_ReturnsServiceUnavailable()
+    public async Task PostSetup_WhenElasticsearchIsConfiguredWithAliasedEnvironmentVariables_ReturnsServiceUnavailable()
     {
         await using var app = IntegrationTestHelpers.CreateDashboardWebApplication(_testOutputHelper, config =>
         {
-            config["Dashboard:Elasticsearch:Enabled"] = "true";
-            config["Dashboard:Elasticsearch:Endpoint"] = "http://127.0.0.1:1";
+            config[ElasticsearchConfigNames.EnabledEnvVarName] = "true";
+            config[ElasticsearchConfigNames.EndpointEnvVarName] = "http://127.0.0.1:1";
         });
         await app.StartAsync().DefaultTimeout();
 

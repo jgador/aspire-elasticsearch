@@ -10,12 +10,13 @@ public sealed class ElasticsearchOptions
 {
     /// <summary>
     /// Gets or sets whether Elasticsearch log persistence is enabled. Defaults to <c>false</c>.
+    /// This value can be supplied with the <c>ASPIRE_DASHBOARD_ELASTICSEARCH_ENABLED</c> environment variable.
     /// </summary>
     public bool Enabled { get; set; }
 
     /// <summary>
     /// Gets or sets the Elasticsearch endpoint URL (for example, <c>http://localhost:9200</c>).
-    /// This value can be supplied with the <c>Dashboard__Elasticsearch__Endpoint</c> environment variable.
+    /// This value can be supplied with the <c>ASPIRE_DASHBOARD_ELASTICSEARCH_ENDPOINT</c> environment variable.
     /// </summary>
     public string? Endpoint { get; set; }
 
