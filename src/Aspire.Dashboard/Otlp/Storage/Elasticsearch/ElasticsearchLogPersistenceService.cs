@@ -13,6 +13,8 @@ namespace Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 /// </summary>
 internal sealed class ElasticsearchLogPersistenceService : BackgroundService
 {
+    private static readonly TimeSpan s_setupRetryDelay = TimeSpan.FromSeconds(5);
+
     private readonly TelemetryRepository _telemetryRepository;
     private readonly ElasticsearchClient _client;
     private readonly ElasticsearchDataStreamSetup _dataStreamSetup;
@@ -38,16 +40,7 @@ internal sealed class ElasticsearchLogPersistenceService : BackgroundService
         _logger.LogInformation("Elasticsearch log persistence service starting. Data stream: '{DataStreamName}', Endpoint: '{Endpoint}'.",
             _options.DataStreamName, _options.Endpoint);
 
-        try
-        {
-            // Ensure the data stream index template exists before we start writing.
-            await _dataStreamSetup.EnsureDataStreamAsync(stoppingToken).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogError(ex, "Failed to set up Elasticsearch data stream. Log persistence will not be available.");
-            return;
-        }
+        await WaitForDataStreamReadyAsync(stoppingToken).ConfigureAwait(false);
 
         _logger.LogInformation("Elasticsearch data stream ready. Beginning log ingestion.");
 
@@ -119,6 +112,33 @@ internal sealed class ElasticsearchLogPersistenceService : BackgroundService
             }
 
             _logger.LogInformation("Elasticsearch log persistence service stopped.");
+        }
+    }
+
+    private async Task WaitForDataStreamReadyAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            try
+            {
+                await _dataStreamSetup.EnsureDataStreamAsync(cancellationToken).ConfigureAwait(false);
+                return;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to set up Elasticsearch data stream. Retrying in {RetryDelaySeconds} second(s).",
+                    s_setupRetryDelay.TotalSeconds);
+
+                await Task.Delay(s_setupRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
         }
     }
 

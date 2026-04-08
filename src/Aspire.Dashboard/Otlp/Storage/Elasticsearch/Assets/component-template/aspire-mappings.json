@@ -1,0 +1,79 @@
+{
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": {
+          "type": "date"
+        },
+        "log.level": {
+          "type": "keyword"
+        },
+        "log.severity_number": {
+          "type": "integer"
+        },
+        "log.logger": {
+          "type": "keyword",
+          "ignore_above": 32767
+        },
+        "log.original_format": {
+          "type": "keyword",
+          "ignore_above": 32767
+        },
+        "log.flags": {
+          "type": "integer"
+        },
+        "message": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 32767
+            }
+          }
+        },
+        "trace.id": {
+          "type": "keyword"
+        },
+        "span.id": {
+          "type": "keyword"
+        },
+        "parent.id": {
+          "type": "keyword"
+        },
+        "service.name": {
+          "type": "keyword"
+        },
+        "service.instance.id": {
+          "type": "keyword"
+        },
+        "event.name": {
+          "type": "keyword"
+        },
+        "error.type": {
+          "type": "keyword"
+        },
+        "error.message": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 32767
+            }
+          }
+        },
+        "error.stack_trace": {
+          "type": "text",
+          "fields": {
+            "keyword": {
+              "type": "keyword",
+              "ignore_above": 32767
+            }
+          }
+        },
+        "labels": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

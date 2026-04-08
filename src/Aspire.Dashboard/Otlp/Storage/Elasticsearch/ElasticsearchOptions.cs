@@ -14,7 +14,8 @@ public sealed class ElasticsearchOptions
     public bool Enabled { get; set; }
 
     /// <summary>
-    /// Gets or sets the Elasticsearch endpoint URL (e.g., <c>http://localhost:9200</c>).
+    /// Gets or sets the Elasticsearch endpoint URL (for example, <c>http://localhost:9200</c>).
+    /// This value can be supplied with the <c>Dashboard__Elasticsearch__Endpoint</c> environment variable.
     /// </summary>
     public string? Endpoint { get; set; }
 

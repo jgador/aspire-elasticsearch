@@ -173,7 +173,10 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
         _explainErrorsButton?.UpdateHasErrors(ViewModel.HasErrors());
         _aiContext?.ContextHasChanged();
 
-        TelemetryRepository.MarkViewedErrorLogs(ViewModel.ResourceKey);
+        if (!ViewModel.HasElasticsearchLogsService)
+        {
+            TelemetryRepository.MarkViewedErrorLogs(ViewModel.ResourceKey);
+        }
 
         return GridItemsProviderResult.From(logs.Items, logs.TotalItemCount);
     }
@@ -296,10 +299,13 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
 
         if (LogEntryId is not null)
         {
-            var logEntryId = TelemetryRepository.GetLog(LogEntryId.Value);
-            if (logEntryId != null)
+            if (!ViewModel.HasElasticsearchLogsService)
             {
-                await OnShowPropertiesAsync(logEntryId, buttonId: null);
+                var logEntryId = TelemetryRepository.GetLog(LogEntryId.Value);
+                if (logEntryId != null)
+                {
+                    await OnShowPropertiesAsync(logEntryId, buttonId: null);
+                }
             }
 
             // Navigate to remove ?logEntryId=xxx in the URL.
@@ -309,7 +315,7 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
 
     private void UpdateResources()
     {
-        _resources = TelemetryRepository.GetResources();
+        _resources = ViewModel.GetResources();
         _resourceViewModels = ResourcesSelectHelpers.CreateResources(_resources);
         _resourceViewModels.Insert(0, _allResource);
     }
@@ -436,9 +442,9 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
         var data = new FilterDialogViewModel
         {
             Filter = entry,
-            PropertyKeys = TelemetryRepository.GetLogPropertyKeys(PageViewModel.SelectedResource.Id?.GetResourceKey()),
+            PropertyKeys = ViewModel.GetLogPropertyKeys(),
             KnownKeys = KnownStructuredLogFields.AllFields,
-            GetFieldValues = TelemetryRepository.GetLogsFieldValues
+            GetFieldValues = ViewModel.GetLogsFieldValues
         };
 
         await DialogService.ShowPanelAsync<FilterDialog>(data, parameters);
@@ -789,6 +795,11 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
 
     private Task ClearStructureLogs(ResourceKey? key)
     {
+        if (ViewModel.HasElasticsearchLogsService)
+        {
+            return Task.CompletedTask;
+        }
+
         TelemetryRepository.ClearStructuredLogs(key);
         return Task.CompletedTask;
     }

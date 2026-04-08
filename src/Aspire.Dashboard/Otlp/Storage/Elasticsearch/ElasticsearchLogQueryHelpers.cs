@@ -178,11 +178,11 @@ internal static class ElasticsearchLogQueryHelpers
                 resolvedField = CreateTextField(MessageFieldName);
                 return true;
             case KnownStructuredLogFields.CategoryField:
-                resolvedField = CreateTextField(CategoryFieldName);
+                resolvedField = CreateKeywordField(CategoryFieldName);
                 return true;
             case nameof(OtlpLogEntry.OriginalFormat):
             case KnownStructuredLogFields.OriginalFormatField:
-                resolvedField = CreateTextField(OriginalFormatFieldName);
+                resolvedField = CreateKeywordField(OriginalFormatFieldName);
                 return true;
             case nameof(OtlpLogEntry.EventName):
             case KnownStructuredLogFields.EventNameField:

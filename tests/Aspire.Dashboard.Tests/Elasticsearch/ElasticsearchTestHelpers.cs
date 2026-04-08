@@ -8,6 +8,8 @@ using Aspire.Dashboard.Configuration;
 using Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 using Elastic.Clients.Elasticsearch;
 using Elastic.Transport;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -49,6 +51,18 @@ internal static class ElasticsearchTestHelpers
             Options.Create(options ?? CreateOptions()),
             Options.Create(new DashboardOptions()),
             NullLogger<ElasticsearchLogsService>.Instance);
+    }
+
+    public static ElasticsearchDataStreamSetup CreateDataStreamSetup(
+        RecordingInMemoryRequestInvoker invoker,
+        ElasticsearchOptions? options = null)
+    {
+        var client = CreateClient(invoker);
+        return new ElasticsearchDataStreamSetup(
+            client,
+            CreateHostEnvironment(),
+            Options.Create(options ?? CreateOptions()),
+            NullLogger<ElasticsearchDataStreamSetup>.Instance);
     }
 
     public static RecordingInMemoryRequestInvoker CreateInvoker(params string[] responses)
@@ -100,6 +114,85 @@ internal static class ElasticsearchTestHelpers
         return JsonSerializer.Serialize(response, s_jsonOptions);
     }
 
+    public static string CreateAcknowledgedResponseJson()
+    {
+        return JsonSerializer.Serialize(new
+        {
+            acknowledged = true
+        }, s_jsonOptions);
+    }
+
+    public static string CreateIndexNotFoundResponseJson(string indexName)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            error = new
+            {
+                root_cause = new[]
+                {
+                    new
+                    {
+                        type = "index_not_found_exception",
+                        reason = $"no such index [{indexName}]",
+                        resource = new
+                        {
+                            type = "index_or_alias",
+                            id = indexName
+                        },
+                        index_uuid = "_na_",
+                        index = indexName
+                    }
+                },
+                type = "index_not_found_exception",
+                reason = $"no such index [{indexName}]",
+                resource = new
+                {
+                    type = "index_or_alias",
+                    id = indexName
+                },
+                index_uuid = "_na_",
+                index = indexName
+            },
+            status = 404
+        }, s_jsonOptions);
+    }
+
+    public static string CreateGetDataStreamResponseJson(string dataStreamName)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            data_streams = new[]
+            {
+                new
+                {
+                    name = dataStreamName,
+                    timestamp_field = new
+                    {
+                        name = "@timestamp"
+                    },
+                    indices = new[]
+                    {
+                        new
+                        {
+                            index_name = $".ds-{dataStreamName}-2026.04.07-000001",
+                            index_uuid = "test-index-uuid",
+                            prefer_ilm = true,
+                            managed_by = "Index Lifecycle Management"
+                        }
+                    },
+                    generation = 1,
+                    status = "GREEN",
+                    template = $"{dataStreamName}-template",
+                    hidden = false,
+                    system = false,
+                    allow_custom_routing = false,
+                    replicated = false,
+                    rollover_on_write = false
+                }
+            }
+        }, s_jsonOptions);
+    }
+
     public static ElasticsearchLogDocument CreateDocument(
         string? serviceName = "orders-api",
         string? serviceInstanceId = "instance-1",
@@ -139,6 +232,45 @@ internal static class ElasticsearchTestHelpers
             Endpoint = "http://localhost:9200",
             DataStreamName = "aspire-logs"
         };
+    }
+
+    private static IHostEnvironment CreateHostEnvironment()
+    {
+        return new TestHostEnvironment
+        {
+            ApplicationName = "Aspire.Dashboard.Tests",
+            ContentRootPath = ResolveDashboardContentRootPath(),
+            EnvironmentName = Environments.Development
+        };
+    }
+
+    private static string ResolveDashboardContentRootPath()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "src", "Aspire.Dashboard");
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Unable to locate the Aspire.Dashboard project directory for Elasticsearch asset tests.");
+    }
+
+    private sealed class TestHostEnvironment : IHostEnvironment
+    {
+        public string EnvironmentName { get; set; } = string.Empty;
+
+        public string ApplicationName { get; set; } = string.Empty;
+
+        public string ContentRootPath { get; set; } = string.Empty;
+
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }
 

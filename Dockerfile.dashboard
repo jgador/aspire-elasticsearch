@@ -8,9 +8,10 @@
 #   docker build -f Dockerfile.dashboard -t jessegador/aspire-dashboard:latest .
 #
 # Run:
-#   docker run -p 18888:18888 -p 18889:18889 -p 18890:18890 \
-#     -e Dashboard__Elasticsearch__Enabled=true \
-#     -e Dashboard__Elasticsearch__Endpoint=http://elasticsearch:9200 \
+#   # For local kubectl port-forward on the host machine, use host.docker.internal.
+#   docker run -p 18888:18888 -p 18889:18889 -p 18890:18890 `
+#     -e Dashboard__Elasticsearch__Enabled=true `
+#     -e Dashboard__Elasticsearch__Endpoint=http://host.docker.internal:9200 `
 #     jessegador/aspire-dashboard:latest
 # ---------------------------------------------------------------
 

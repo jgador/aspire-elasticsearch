@@ -164,7 +164,7 @@ public class ElasticsearchLogsServiceTests
         Assert.Equal(2, values["Frontend.Logger"]);
 
         var request = Assert.Single(invoker.Requests);
-        Assert.Contains("\"log.logger.keyword\"", request.Body);
+        Assert.Contains("\"log.logger\"", request.Body);
     }
 
     [Fact]

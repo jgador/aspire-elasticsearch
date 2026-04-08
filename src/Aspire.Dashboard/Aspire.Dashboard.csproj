@@ -331,6 +331,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Update="Otlp\Storage\Elasticsearch\Assets\**\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Remove="wwwroot\js\README.md" />
     <None Include="wwwroot\js\README.md" />
   </ItemGroup>

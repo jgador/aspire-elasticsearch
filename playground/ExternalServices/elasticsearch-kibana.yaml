@@ -1,0 +1,234 @@
+# Cost-optimized single-node Elasticsearch + Kibana reference for Aspire development/testing.
+# This provisions Elasticsearch and Kibana only. Connecting Aspire Dashboard or other apps to this
+# instance is a separate concern.
+# Assumes the cluster has a default StorageClass. If it does not, set
+# storageClassName on the PVC below before applying.
+# Apply with:
+# kubectl apply -f playground/ExternalServices/elasticsearch-kibana.yaml
+# Remove with:
+# kubectl delete -f playground/ExternalServices/elasticsearch-kibana.yaml
+# Access Kibana locally with:
+# kubectl port-forward -n aspire svc/kibana 5601:5601
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aspire
+  labels:
+    app.kubernetes.io/part-of: aspire
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: elasticsearch-data
+  namespace: aspire
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/part-of: aspire
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: elasticsearch-config
+  namespace: aspire
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/part-of: aspire
+data:
+  elasticsearch.yml: |
+    cluster.name: aspire
+    node.name: elasticsearch
+    discovery.type: single-node
+    network.host: 0.0.0.0
+    xpack.security.enabled: false
+    xpack.ml.enabled: false
+    xpack.monitoring.collection.enabled: false
+    ingest.geoip.downloader.enabled: false
+    node.store.allow_mmap: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch
+  namespace: aspire
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/part-of: aspire
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: elasticsearch
+  ports:
+    - name: http
+      port: 9200
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch
+  namespace: aspire
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/part-of: aspire
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: elasticsearch
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: elasticsearch
+        app.kubernetes.io/part-of: aspire
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: elasticsearch
+          image: elasticsearch:8.17.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 9200
+          env:
+            - name: ES_JAVA_OPTS
+              value: -Xms512m -Xmx512m
+          resources:
+            requests:
+              cpu: 100m
+              memory: 768Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: elasticsearch-config
+              mountPath: /usr/share/elasticsearch/config/elasticsearch.yml
+              subPath: elasticsearch.yml
+            - name: elasticsearch-data
+              mountPath: /usr/share/elasticsearch/data
+      volumes:
+        - name: elasticsearch-config
+          configMap:
+            name: elasticsearch-config
+        - name: elasticsearch-data
+          persistentVolumeClaim:
+            claimName: elasticsearch-data
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kibana-config
+  namespace: aspire
+  labels:
+    app.kubernetes.io/name: kibana
+    app.kubernetes.io/part-of: aspire
+data:
+  kibana.yml: |
+    server.port: 5601
+    server.host: 0.0.0.0
+    server.shutdownTimeout: "5s"
+    elasticsearch.hosts: ["http://elasticsearch:9200"]
+    elasticsearch.ssl.verificationMode: none
+    monitoring.ui.container.elasticsearch.enabled: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+  namespace: aspire
+  labels:
+    app.kubernetes.io/name: kibana
+    app.kubernetes.io/part-of: aspire
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: kibana
+  ports:
+    - name: http
+      port: 5601
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana
+  namespace: aspire
+  labels:
+    app.kubernetes.io/name: kibana
+    app.kubernetes.io/part-of: aspire
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kibana
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kibana
+        app.kubernetes.io/part-of: aspire
+    spec:
+      containers:
+        - name: kibana
+          image: kibana:8.17.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5601
+          env:
+            - name: NODE_OPTIONS
+              value: --max-old-space-size=512
+          resources:
+            requests:
+              cpu: 50m
+              memory: 512Mi
+            limits:
+              cpu: 250m
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 18
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: kibana-config
+              mountPath: /usr/share/kibana/config/kibana.yml
+              subPath: kibana.yml
+      volumes:
+        - name: kibana-config
+          configMap:
+            name: kibana-config

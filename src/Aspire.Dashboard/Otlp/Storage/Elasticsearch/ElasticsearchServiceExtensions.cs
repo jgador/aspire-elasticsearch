@@ -51,7 +51,8 @@ internal static class ElasticsearchServiceExtensions
         {
             throw new InvalidOperationException(
                 "Elasticsearch endpoint must be configured when Elasticsearch log persistence is enabled. " +
-                $"Set the '{ConfigSectionPath}:{nameof(ElasticsearchOptions.Endpoint)}' configuration value.");
+                $"Set the '{ConfigSectionPath}:{nameof(ElasticsearchOptions.Endpoint)}' configuration value " +
+                $"or the 'Dashboard__Elasticsearch__{nameof(ElasticsearchOptions.Endpoint)}' environment variable.");
         }
 
         var settings = new ElasticsearchClientSettings(new Uri(options.Endpoint));
