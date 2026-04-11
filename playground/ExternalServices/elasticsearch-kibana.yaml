@@ -3,6 +3,11 @@
 # instance is a separate concern.
 # Assumes the cluster has a default StorageClass. If it does not, set
 # storageClassName on the PVC below before applying.
+# Replace the placeholder credential values in the Secret below before applying.
+# For the minimal built-in-user setup, set the username to "elastic" unless you provision
+# a different Elasticsearch user separately.
+# If this PVC already contains data from an unsecured cluster, recreate the PVC for a fresh
+# dev setup or reset the built-in user password after enabling security.
 # Apply with:
 # kubectl apply -f playground/ExternalServices/elasticsearch-kibana.yaml
 # Remove with:
@@ -26,6 +31,19 @@ spec:
       storage: 15Gi
 ---
 apiVersion: v1
+kind: Secret
+metadata:
+  name: elasticsearch-credentials
+  namespace: default
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/part-of: aspire
+type: Opaque
+stringData:
+  username: "<replace-with-elastic-username>"
+  password: "<replace-with-elastic-password>"
+---
+apiVersion: v1
 kind: ConfigMap
 metadata:
   name: elasticsearch-config
@@ -39,7 +57,7 @@ data:
     node.name: elasticsearch
     discovery.type: single-node
     network.host: 0.0.0.0
-    xpack.security.enabled: false
+    xpack.security.enabled: true
     xpack.ml.enabled: false
     xpack.monitoring.collection.enabled: false
     ingest.geoip.downloader.enabled: false
@@ -95,6 +113,11 @@ spec:
           env:
             - name: ES_JAVA_OPTS
               value: -Xms2g -Xmx2g
+            - name: ELASTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: password
           resources:
             requests:
               cpu: 500m
@@ -103,16 +126,14 @@ spec:
               cpu: 1
               memory: 4Gi
           readinessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: http
             initialDelaySeconds: 20
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 12
           livenessProbe:
-            httpGet:
-              path: /
+            tcpSocket:
               port: http
             initialDelaySeconds: 60
             periodSeconds: 20
@@ -146,6 +167,8 @@ data:
     server.host: 0.0.0.0
     server.shutdownTimeout: "5s"
     elasticsearch.hosts: ["http://elasticsearch:9200"]
+    elasticsearch.username: ${ELASTICSEARCH_USERNAME}
+    elasticsearch.password: ${ELASTICSEARCH_PASSWORD}
     elasticsearch.ssl.verificationMode: none
     monitoring.ui.container.elasticsearch.enabled: false
 ---
@@ -195,6 +218,16 @@ spec:
           env:
             - name: NODE_OPTIONS
               value: --max-old-space-size=512
+            - name: ELASTICSEARCH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: username
+            - name: ELASTICSEARCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: password
           resources:
             requests:
               cpu: 50m
