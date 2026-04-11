@@ -1,19 +1,9 @@
-# Cost-optimized single-node Elasticsearch + Kibana reference for Aspire development/testing.
-# This provisions Elasticsearch and Kibana only. Connecting Aspire Dashboard or other apps to this
-# instance is a separate concern.
-# Assumes the cluster has a default StorageClass. If it does not, set
-# storageClassName on the PVC below before applying.
-# Replace the password value in the Secret below before applying.
-# Sign in to Elasticsearch and Kibana with the built-in "elastic" user and that password.
-# Kibana uses the built-in "kibana_system" user internally, and this manifest sets that
-# password automatically to the same value before Kibana starts.
-# If this PVC already contains data from an unsecured cluster, recreate the PVC for a fresh
-# dev setup or reset the built-in user password after enabling security.
-# Apply with:
+# Single-node Elasticsearch + Kibana for local Aspire development.
+# Replace the Secret password placeholder before applying.
+# Sign in with "elastic"; Kibana uses "kibana_system" internally with the same password.
+# Requires a default StorageClass. If the PVC has old unsecured data, recreate it or reset the built-in passwords.
 # kubectl apply -f playground/ExternalServices/elasticsearch-kibana.yaml
-# Remove with:
 # kubectl delete -f playground/ExternalServices/elasticsearch-kibana.yaml
-# Access Kibana locally with:
 # kubectl port-forward -n default svc/kibana 5601:5601
 ---
 apiVersion: v1
