@@ -10,8 +10,13 @@
 # Run:
 #   # For local kubectl port-forward on the host machine, use host.docker.internal.
 #   docker run -d --name aspire-dashboard -p 18888:18888 -p 18889:18889 -p 18890:18890 `
+#     -e DASHBOARD__FRONTEND__BROWSERTOKEN=replace-with-ui-browser-token `
+#     -e DASHBOARD__OTLP__AUTHMODE=ApiKey `
+#     -e DASHBOARD__OTLP__PRIMARYAPIKEY=replace-with-otlp-api-key `
 #     -e ASPIRE_DASHBOARD_ELASTICSEARCH_ENABLED=true `
 #     -e ASPIRE_DASHBOARD_ELASTICSEARCH_ENDPOINT=http://host.docker.internal:9200 `
+#     -e ASPIRE_DASHBOARD_ELASTICSEARCH_USERNAME=elastic `
+#     -e ASPIRE_DASHBOARD_ELASTICSEARCH_PASSWORD=replace-with-elastic-password `
 #     jessegador/aspire-dashboard:latest
 # ---------------------------------------------------------------
 
