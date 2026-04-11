@@ -173,10 +173,7 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
         _explainErrorsButton?.UpdateHasErrors(ViewModel.HasErrors());
         _aiContext?.ContextHasChanged();
 
-        if (!ViewModel.HasElasticsearchLogsService)
-        {
-            TelemetryRepository.MarkViewedErrorLogs(ViewModel.ResourceKey);
-        }
+        TelemetryRepository.MarkViewedErrorLogs(ViewModel.ResourceKey);
 
         return GridItemsProviderResult.From(logs.Items, logs.TotalItemCount);
     }
