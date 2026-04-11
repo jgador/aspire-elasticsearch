@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Aspire.Dashboard.Configuration;
+using Aspire.Dashboard.Otlp.Storage;
 using Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 using Elastic.Clients.Elasticsearch;
 using Elastic.Transport;
@@ -63,6 +64,26 @@ internal static class ElasticsearchTestHelpers
             CreateHostEnvironment(),
             Options.Create(options ?? CreateOptions()),
             NullLogger<ElasticsearchDataStreamSetup>.Instance);
+    }
+
+    public static ElasticsearchLogPersistenceService CreatePersistenceService(
+        TelemetryRepository telemetryRepository,
+        RecordingInMemoryRequestInvoker invoker,
+        ElasticsearchOptions? options = null)
+    {
+        var resolvedOptions = options ?? CreateOptions();
+        var client = CreateClient(invoker);
+
+        return new ElasticsearchLogPersistenceService(
+            telemetryRepository,
+            client,
+            new ElasticsearchDataStreamSetup(
+                client,
+                CreateHostEnvironment(),
+                Options.Create(resolvedOptions),
+                NullLogger<ElasticsearchDataStreamSetup>.Instance),
+            Options.Create(resolvedOptions),
+            NullLogger<ElasticsearchLogPersistenceService>.Instance);
     }
 
     public static RecordingInMemoryRequestInvoker CreateInvoker(params string[] responses)
@@ -193,6 +214,25 @@ internal static class ElasticsearchTestHelpers
         }, s_jsonOptions);
     }
 
+    public static string CreateBulkResponseJson(int itemCount = 1)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            took = 1,
+            errors = false,
+            items = Enumerable.Range(0, itemCount).Select(index => new
+            {
+                create = new
+                {
+                    _index = "aspire-logs",
+                    _id = $"doc-{index}",
+                    status = 201,
+                    result = "created"
+                }
+            })
+        }, s_jsonOptions);
+    }
+
     public static ElasticsearchLogDocument CreateDocument(
         string? serviceName = "orders-api",
         string? serviceInstanceId = "instance-1",
@@ -281,23 +321,45 @@ internal sealed class RecordingInMemoryRequestInvoker : IRequestInvoker, IDispos
         ["X-Elastic-Product"] = ["Elasticsearch"]
     };
 
+    private readonly object _sync = new();
     private readonly InMemoryRequestInvoker _inner = new();
     private readonly Queue<TestResponse> _responses = new();
 
     public List<RecordedRequest> Requests { get; } = [];
 
+    public int RequestCount
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return Requests.Count;
+            }
+        }
+    }
+
     public ResponseFactory ResponseFactory => _inner.ResponseFactory;
 
     public void EnqueueResponse(string responseBody, int statusCode = 200, string contentType = "application/json")
     {
-        _responses.Enqueue(new TestResponse(responseBody, statusCode, contentType));
+        lock (_sync)
+        {
+            _responses.Enqueue(new TestResponse(responseBody, statusCode, contentType));
+        }
+    }
+
+    public RecordedRequest[] GetRequestsSnapshot()
+    {
+        lock (_sync)
+        {
+            return [.. Requests];
+        }
     }
 
     public TResponse Request<TResponse>(Endpoint endpoint, BoundConfiguration boundConfiguration, PostData? postData)
         where TResponse : TransportResponse, new()
     {
-        Requests.Add(CaptureRequest(endpoint, boundConfiguration, postData));
-        var response = DequeueResponse();
+        var response = RecordRequestAndDequeueResponse(endpoint, boundConfiguration, postData);
         var responseBytes = Encoding.UTF8.GetBytes(response.Body);
 
         return ResponseFactory.Create<TResponse>(
@@ -317,8 +379,7 @@ internal sealed class RecordingInMemoryRequestInvoker : IRequestInvoker, IDispos
     public Task<TResponse> RequestAsync<TResponse>(Endpoint endpoint, BoundConfiguration boundConfiguration, PostData? postData, CancellationToken cancellationToken)
         where TResponse : TransportResponse, new()
     {
-        Requests.Add(CaptureRequest(endpoint, boundConfiguration, postData));
-        var response = DequeueResponse();
+        var response = RecordRequestAndDequeueResponse(endpoint, boundConfiguration, postData);
         var responseBytes = Encoding.UTF8.GetBytes(response.Body);
 
         return ResponseFactory.CreateAsync<TResponse>(
@@ -334,6 +395,16 @@ internal sealed class RecordingInMemoryRequestInvoker : IRequestInvoker, IDispos
             threadPoolStats: null,
             tcpStats: null,
             cancellationToken);
+    }
+
+    private TestResponse RecordRequestAndDequeueResponse(Endpoint endpoint, BoundConfiguration boundConfiguration, PostData? postData)
+    {
+        lock (_sync)
+        {
+            Requests.Add(CaptureRequest(endpoint, boundConfiguration, postData));
+
+            return DequeueResponse();
+        }
     }
 
     private static RecordedRequest CaptureRequest(Endpoint endpoint, BoundConfiguration boundConfiguration, PostData? postData)

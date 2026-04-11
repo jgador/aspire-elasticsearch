@@ -46,44 +46,66 @@ internal sealed class ElasticsearchLogPersistenceService : BackgroundService
 
         var batch = new List<ElasticsearchLogDocument>(_options.BatchSize);
         var flushInterval = TimeSpan.FromSeconds(_options.FlushIntervalSeconds);
+        PeriodicTimer? flushTimer = null;
 
         try
         {
-            using var flushTimer = new PeriodicTimer(flushInterval);
-            using var flushCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-
             // Start the log watcher — resourceKey: null watches all resources, filters: null means no filtering.
             var logStream = _telemetryRepository.WatchLogsAsync(
                 resourceKey: null,
                 filters: null,
                 cancellationToken: stoppingToken);
 
-            // Process logs with time-based flushing.
-            // We use a Task to track the timer so we can flush on interval OR batch size.
-            var timerTask = WaitForTimerAsync(flushTimer, flushCts.Token);
+            var logEnumerator = logStream.GetAsyncEnumerator(stoppingToken);
 
-            await foreach (var logEntry in logStream.ConfigureAwait(false))
+            await using (logEnumerator.ConfigureAwait(false))
             {
-                var document = ElasticsearchLogMapper.ToDocument(logEntry);
-                batch.Add(document);
-
-                if (batch.Count >= _options.BatchSize)
+                Task<bool> ResetFlushTimer()
                 {
-                    await FlushBatchAsync(batch, stoppingToken).ConfigureAwait(false);
+                    flushTimer?.Dispose();
+                    flushTimer = new PeriodicTimer(flushInterval);
 
-                    // Reset the timer by cancelling and recreating.
-                    await flushCts.CancelAsync().ConfigureAwait(false);
-                    flushCts.TryReset();
-                    timerTask = WaitForTimerAsync(flushTimer, flushCts.Token);
+                    return flushTimer.WaitForNextTickAsync(stoppingToken).AsTask();
                 }
-                else if (timerTask.IsCompleted)
+
+                var flushTimerTask = ResetFlushTimer();
+                var nextLogTask = logEnumerator.MoveNextAsync().AsTask();
+
+                while (true)
                 {
-                    // Timer elapsed — flush whatever we have.
-                    if (batch.Count > 0)
+                    var completedTask = await Task.WhenAny(nextLogTask, flushTimerTask).ConfigureAwait(false);
+
+                    if (completedTask == nextLogTask)
                     {
-                        await FlushBatchAsync(batch, stoppingToken).ConfigureAwait(false);
+                        if (!await nextLogTask.ConfigureAwait(false))
+                        {
+                            break;
+                        }
+
+                        batch.Add(ElasticsearchLogMapper.ToDocument(logEnumerator.Current));
+
+                        if (batch.Count >= _options.BatchSize)
+                        {
+                            await FlushBatchAsync(batch, stoppingToken).ConfigureAwait(false);
+                            flushTimerTask = ResetFlushTimer();
+                        }
+
+                        nextLogTask = logEnumerator.MoveNextAsync().AsTask();
                     }
-                    timerTask = WaitForTimerAsync(flushTimer, flushCts.Token);
+                    else
+                    {
+                        if (!await flushTimerTask.ConfigureAwait(false))
+                        {
+                            break;
+                        }
+
+                        if (batch.Count > 0)
+                        {
+                            await FlushBatchAsync(batch, stoppingToken).ConfigureAwait(false);
+                        }
+
+                        flushTimerTask = ResetFlushTimer();
+                    }
                 }
             }
         }
@@ -97,6 +119,8 @@ internal sealed class ElasticsearchLogPersistenceService : BackgroundService
         }
         finally
         {
+            flushTimer?.Dispose();
+
             // Flush any remaining logs in the batch on shutdown.
             if (batch.Count > 0)
             {
@@ -192,15 +216,4 @@ internal sealed class ElasticsearchLogPersistenceService : BackgroundService
         }
     }
 
-    private static async Task WaitForTimerAsync(PeriodicTimer timer, CancellationToken cancellationToken)
-    {
-        try
-        {
-            await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected when resetting the timer.
-        }
-    }
 }
