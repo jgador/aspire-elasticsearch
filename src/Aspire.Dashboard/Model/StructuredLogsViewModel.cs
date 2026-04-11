@@ -217,7 +217,7 @@ public class StructuredLogsViewModel
 
     public Dictionary<string, int> GetLogsFieldValues(string field)
     {
-        return TryGetElasticsearchResult(service => service.TryGetLogsFieldValuesAsync(resourceKey: null, field: field, cancellationToken: s_noCancellation))
+        return TryGetElasticsearchResult(service => service.TryGetLogsFieldValuesAsync(ResourceKey, field: field, cancellationToken: s_noCancellation))
             ?? _telemetryRepository.GetLogsFieldValues(field);
     }
 

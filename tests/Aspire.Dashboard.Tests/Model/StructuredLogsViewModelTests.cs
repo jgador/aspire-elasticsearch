@@ -143,6 +143,40 @@ public sealed class StructuredLogsViewModelTests
     }
 
     [Fact]
+    public void GetLogsFieldValues_PassesSelectedResourceKeyToElasticsearch()
+    {
+        var repository = CreateRepository();
+        var invoker = ElasticsearchTestHelpers.CreateInvoker(
+            ElasticsearchTestHelpers.CreateSearchResponseJson(
+                aggregations: new Dictionary<string, object?>
+                {
+                    ["sterms#field_values"] = new
+                    {
+                        doc_count_error_upper_bound = 0,
+                        sum_other_doc_count = 0,
+                        buckets = new object[]
+                        {
+                            new { key = "Checkout.Logger", doc_count = 4 }
+                        }
+                    }
+                }));
+
+        var service = ElasticsearchTestHelpers.CreateLogsService(invoker);
+        var viewModel = CreateViewModel(repository, elasticsearchLogsService: service);
+        viewModel.ResourceKey = new ResourceKey("checkout", "instance-a");
+
+        var fieldValues = viewModel.GetLogsFieldValues(KnownStructuredLogFields.CategoryField);
+
+        Assert.Equal(4, fieldValues["Checkout.Logger"]);
+
+        var request = Assert.Single(invoker.Requests);
+        Assert.Contains("\"service.name\"", request.Body);
+        Assert.Contains("\"checkout\"", request.Body);
+        Assert.Contains("\"service.instance.id\"", request.Body);
+        Assert.Contains("\"instance-a\"", request.Body);
+    }
+
+    [Fact]
     public void GetErrorLogs_UsesElasticsearchSeverityAndDurationFilters()
     {
         var repository = CreateRepository();
