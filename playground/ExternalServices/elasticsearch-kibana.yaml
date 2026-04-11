@@ -3,9 +3,10 @@
 # instance is a separate concern.
 # Assumes the cluster has a default StorageClass. If it does not, set
 # storageClassName on the PVC below before applying.
-# Replace the placeholder credential values in the Secret below before applying.
-# For the minimal built-in-user setup, set the username to "elastic" unless you provision
-# a different Elasticsearch user separately.
+# Replace the password value in the Secret below before applying.
+# Sign in to Elasticsearch and Kibana with the built-in "elastic" user and that password.
+# Kibana uses the built-in "kibana_system" user internally, and this manifest sets that
+# password automatically to the same value before Kibana starts.
 # If this PVC already contains data from an unsecured cluster, recreate the PVC for a fresh
 # dev setup or reset the built-in user password after enabling security.
 # Apply with:
@@ -40,7 +41,6 @@ metadata:
     app.kubernetes.io/part-of: aspire
 type: Opaque
 stringData:
-  username: "<replace-with-elastic-username>"
   password: "<replace-with-elastic-password>"
 ---
 apiVersion: v1
@@ -208,6 +208,39 @@ spec:
         app.kubernetes.io/name: kibana
         app.kubernetes.io/part-of: aspire
     spec:
+      initContainers:
+        - name: configure-kibana-system-password
+          image: curlimages/curl:8.12.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ELASTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: password
+            - name: KIBANA_SYSTEM_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: elasticsearch-credentials
+                  key: password
+          command:
+            - /bin/sh
+            - -ec
+            - |
+              until [ "$(curl -s -o /dev/null -w '%{http_code}' -u "elastic:${ELASTIC_PASSWORD}" http://elasticsearch:9200/_security/_authenticate)" = "200" ]; do
+                sleep 5
+              done
+
+              status_code="$(curl -s -o /tmp/set-kibana-system-password-response.txt -w '%{http_code}' \
+                -u "elastic:${ELASTIC_PASSWORD}" \
+                -H "Content-Type: application/json" \
+                -X POST "http://elasticsearch:9200/_security/user/kibana_system/_password" \
+                -d "{\"password\":\"${KIBANA_SYSTEM_PASSWORD}\"}")"
+
+              if [ "${status_code}" != "200" ] && [ "${status_code}" != "204" ]; then
+                cat /tmp/set-kibana-system-password-response.txt
+                exit 1
+              fi
       containers:
         - name: kibana
           image: kibana:8.17.0
@@ -219,10 +252,7 @@ spec:
             - name: NODE_OPTIONS
               value: --max-old-space-size=512
             - name: ELASTICSEARCH_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: elasticsearch-credentials
-                  key: username
+              value: kibana_system
             - name: ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
