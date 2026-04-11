@@ -8,20 +8,13 @@
 # Remove with:
 # kubectl delete -f playground/ExternalServices/elasticsearch-kibana.yaml
 # Access Kibana locally with:
-# kubectl port-forward -n aspire svc/kibana 5601:5601
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: aspire
-  labels:
-    app.kubernetes.io/part-of: aspire
+# kubectl port-forward -n default svc/kibana 5601:5601
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: elasticsearch-data
-  namespace: aspire
+  namespace: default
   labels:
     app.kubernetes.io/name: elasticsearch
     app.kubernetes.io/part-of: aspire
@@ -30,13 +23,13 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 15Gi
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: elasticsearch-config
-  namespace: aspire
+  namespace: default
   labels:
     app.kubernetes.io/name: elasticsearch
     app.kubernetes.io/part-of: aspire
@@ -56,7 +49,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: elasticsearch
-  namespace: aspire
+  namespace: default
   labels:
     app.kubernetes.io/name: elasticsearch
     app.kubernetes.io/part-of: aspire
@@ -73,7 +66,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: elasticsearch
-  namespace: aspire
+  namespace: default
   labels:
     app.kubernetes.io/name: elasticsearch
     app.kubernetes.io/part-of: aspire
@@ -101,14 +94,14 @@ spec:
               containerPort: 9200
           env:
             - name: ES_JAVA_OPTS
-              value: -Xms512m -Xmx512m
+              value: -Xms2g -Xmx2g
           resources:
             requests:
-              cpu: 100m
-              memory: 768Mi
-            limits:
               cpu: 500m
-              memory: 1Gi
+              memory: 3Gi
+            limits:
+              cpu: 1
+              memory: 4Gi
           readinessProbe:
             httpGet:
               path: /
@@ -143,7 +136,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: kibana-config
-  namespace: aspire
+  namespace: default
   labels:
     app.kubernetes.io/name: kibana
     app.kubernetes.io/part-of: aspire
@@ -160,7 +153,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: kibana
-  namespace: aspire
+  namespace: default
   labels:
     app.kubernetes.io/name: kibana
     app.kubernetes.io/part-of: aspire
@@ -177,7 +170,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: kibana
-  namespace: aspire
+  namespace: default
   labels:
     app.kubernetes.io/name: kibana
     app.kubernetes.io/part-of: aspire
