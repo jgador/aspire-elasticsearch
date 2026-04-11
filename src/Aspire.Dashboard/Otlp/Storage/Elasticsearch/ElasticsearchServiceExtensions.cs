@@ -27,7 +27,11 @@ internal static class ElasticsearchServiceExtensions
         }
 
         services.Configure<ElasticsearchOptions>(section);
-        services.PostConfigure<ElasticsearchOptions>(options => ApplyAliasedConfiguration(configuration, options));
+        services.PostConfigure<ElasticsearchOptions>(options =>
+        {
+            ApplyAliasedConfiguration(configuration, options);
+            NormalizePositiveValues(options);
+        });
 
         services.AddSingleton(sp =>
         {
@@ -84,12 +88,12 @@ internal static class ElasticsearchServiceExtensions
             options.DataStreamName = dataStreamName;
         }
 
-        if (GetIntValue(configuration, ElasticsearchConfigNames.BatchSizeEnvVarName) is { } batchSize)
+        if (GetIntValue(configuration, ElasticsearchConfigNames.BatchSizeEnvVarName) is { } batchSize && batchSize > 0)
         {
             options.BatchSize = batchSize;
         }
 
-        if (GetIntValue(configuration, ElasticsearchConfigNames.FlushIntervalSecondsEnvVarName) is { } flushIntervalSeconds)
+        if (GetIntValue(configuration, ElasticsearchConfigNames.FlushIntervalSecondsEnvVarName) is { } flushIntervalSeconds && flushIntervalSeconds > 0)
         {
             options.FlushIntervalSeconds = flushIntervalSeconds;
         }
@@ -107,6 +111,21 @@ internal static class ElasticsearchServiceExtensions
         if (configuration[ElasticsearchConfigNames.PasswordEnvVarName] is { Length: > 0 } password)
         {
             options.Password = password;
+        }
+    }
+
+    private static void NormalizePositiveValues(ElasticsearchOptions options)
+    {
+        var defaultOptions = new ElasticsearchOptions();
+
+        if (options.BatchSize <= 0)
+        {
+            options.BatchSize = defaultOptions.BatchSize;
+        }
+
+        if (options.FlushIntervalSeconds <= 0)
+        {
+            options.FlushIntervalSeconds = defaultOptions.FlushIntervalSeconds;
         }
     }
 

@@ -76,4 +76,54 @@ public class ElasticsearchConfigNamesTests
             descriptor => descriptor.ServiceType == typeof(IHostedService)
                 && descriptor.ImplementationType == typeof(ElasticsearchLogPersistenceService));
     }
+
+    [Fact]
+    public void AddElasticsearchLogPersistence_IgnoresNonPositiveAliasedBatchSettings()
+    {
+        var configuration = new ConfigurationManager()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [ElasticsearchConfigNames.EnabledKey] = "true",
+                [ElasticsearchConfigNames.BatchSizeKey] = "250",
+                [ElasticsearchConfigNames.FlushIntervalSecondsKey] = "15",
+                [ElasticsearchConfigNames.BatchSizeEnvVarName] = "-1",
+                [ElasticsearchConfigNames.FlushIntervalSecondsEnvVarName] = "0"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+
+        services.AddElasticsearchLogPersistence(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<ElasticsearchOptions>>().Value;
+
+        Assert.Equal(250, options.BatchSize);
+        Assert.Equal(15, options.FlushIntervalSeconds);
+    }
+
+    [Fact]
+    public void AddElasticsearchLogPersistence_RevertsNonPositiveSectionBatchSettingsToDefaults()
+    {
+        var defaultOptions = new ElasticsearchOptions();
+
+        var configuration = new ConfigurationManager()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [ElasticsearchConfigNames.EnabledKey] = "true",
+                [ElasticsearchConfigNames.BatchSizeKey] = "-1",
+                [ElasticsearchConfigNames.FlushIntervalSecondsKey] = "0"
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+
+        services.AddElasticsearchLogPersistence(configuration);
+
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<ElasticsearchOptions>>().Value;
+
+        Assert.Equal(defaultOptions.BatchSize, options.BatchSize);
+        Assert.Equal(defaultOptions.FlushIntervalSeconds, options.FlushIntervalSeconds);
+    }
 }
