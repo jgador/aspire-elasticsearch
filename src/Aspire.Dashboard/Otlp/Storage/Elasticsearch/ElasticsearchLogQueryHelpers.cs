@@ -15,6 +15,7 @@ namespace Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 internal static class ElasticsearchLogQueryHelpers
 {
     private const string KeywordSuffix = ".keyword";
+    private const string QueryStringSpecialCharacters = "+-=><!(){}[]^\"~*?:\\/&| ";
 
     private static readonly LogLevel[] s_severityOrder =
     [
@@ -235,10 +236,10 @@ internal static class ElasticsearchLogQueryHelpers
                 query = CreateNotQuery(CreateEqualsQuery(resolvedField.ExactField, filter.Value));
                 return true;
             case FilterCondition.Contains:
-                query = CreateContainsQuery(resolvedField.ContainsField, filter.Value);
+                query = CreateContainsQuery(resolvedField, filter.Value);
                 return true;
             case FilterCondition.NotContains:
-                query = CreateNotQuery(CreateContainsQuery(resolvedField.ContainsField, filter.Value));
+                query = CreateNotQuery(CreateContainsQuery(resolvedField, filter.Value));
                 return true;
             default:
                 query = default!;
@@ -357,13 +358,34 @@ internal static class ElasticsearchLogQueryHelpers
         };
     }
 
-    private static Query CreateContainsQuery(string fieldName, string value)
+    private static Query CreateContainsQuery(ResolvedField resolvedField, string value)
+    {
+        return resolvedField.ContainsQueryKind switch
+        {
+            ContainsQueryKind.Wildcard => CreateWildcardContainsQuery(resolvedField.ContainsField, value),
+            ContainsQueryKind.QueryString => CreateQueryStringContainsQuery(resolvedField.ContainsField, value),
+            _ => throw new InvalidOperationException($"Unsupported contains query kind '{resolvedField.ContainsQueryKind}'.")
+        };
+    }
+
+    private static Query CreateWildcardContainsQuery(string fieldName, string value)
     {
         return new WildcardQuery
         {
             Field = fieldName,
             CaseInsensitive = true,
             Value = $"*{EscapeWildcardValue(value)}*"
+        };
+    }
+
+    private static Query CreateQueryStringContainsQuery(string fieldName, string value)
+    {
+        return new QueryStringQuery
+        {
+            DefaultField = new Field(fieldName),
+            AllowLeadingWildcard = true,
+            AnalyzeWildcard = true,
+            Query = $"*{EscapeQueryStringValue(value)}*"
         };
     }
 
@@ -392,20 +414,58 @@ internal static class ElasticsearchLogQueryHelpers
         return builder.ToString();
     }
 
-    private static ResolvedField CreateKeywordField(string fieldName) => new(fieldName, fieldName, fieldName);
+    private static string EscapeQueryStringValue(string value)
+    {
+        var builder = new StringBuilder(value.Length);
+
+        for (var i = 0; i < value.Length; i++)
+        {
+            var character = value[i];
+
+            if (character is '&' or '|' && i + 1 < value.Length && value[i + 1] == character)
+            {
+                builder.Append('\\');
+                builder.Append(character);
+                builder.Append('\\');
+                builder.Append(character);
+                i++;
+                continue;
+            }
+
+            if (QueryStringSpecialCharacters.Contains(character))
+            {
+                builder.Append('\\');
+            }
+
+            builder.Append(character);
+        }
+
+        return builder.ToString();
+    }
+
+    private static ResolvedField CreateKeywordField(string fieldName) => new(fieldName, fieldName, fieldName, ContainsQueryKind.Wildcard);
 
     private static ResolvedField CreateTextField(string fieldName)
     {
         var keywordFieldName = fieldName + KeywordSuffix;
-        return new ResolvedField(keywordFieldName, keywordFieldName, keywordFieldName);
+        return new ResolvedField(keywordFieldName, keywordFieldName, keywordFieldName, ContainsQueryKind.Wildcard);
     }
 
     private static ResolvedField CreateDynamicLabelField(string fieldName)
     {
         var labelFieldName = $"{LabelsFieldName}.{fieldName}";
-        var keywordFieldName = labelFieldName + KeywordSuffix;
-        return new ResolvedField(keywordFieldName, keywordFieldName, keywordFieldName);
+        return new ResolvedField(labelFieldName, labelFieldName, labelFieldName, ContainsQueryKind.QueryString);
     }
 
-    private readonly record struct ResolvedField(string ExactField, string ContainsField, string AggregationField);
+    private readonly record struct ResolvedField(
+        string ExactField,
+        string ContainsField,
+        string AggregationField,
+        ContainsQueryKind ContainsQueryKind);
+
+    private enum ContainsQueryKind
+    {
+        Wildcard,
+        QueryString
+    }
 }

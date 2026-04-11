@@ -168,6 +168,38 @@ public class ElasticsearchLogsServiceTests
     }
 
     [Fact]
+    public async Task TryGetLogsFieldValuesAsync_CustomLabel_ReturnsCountsFromFlattenedFieldAggregation()
+    {
+        var invoker = ElasticsearchTestHelpers.CreateInvoker(
+            ElasticsearchTestHelpers.CreateSearchResponseJson(
+                aggregations: new Dictionary<string, object?>
+                {
+                    ["sterms#field_values"] = new
+                    {
+                        doc_count_error_upper_bound = 0,
+                        sum_other_doc_count = 0,
+                        buckets = new object[]
+                        {
+                            new { key = "1234", doc_count = 4 },
+                            new { key = "5678", doc_count = 2 }
+                        }
+                    }
+                }));
+
+        var service = ElasticsearchTestHelpers.CreateLogsService(invoker);
+
+        var values = await service.TryGetLogsFieldValuesAsync(resourceKey: null, "OrderId", CancellationToken.None);
+
+        Assert.NotNull(values);
+        Assert.Equal(4, values["1234"]);
+        Assert.Equal(2, values["5678"]);
+
+        var request = Assert.Single(invoker.Requests);
+        Assert.Contains("\"labels.OrderId\"", request.Body);
+        Assert.DoesNotContain("\"labels.OrderId.keyword\"", request.Body);
+    }
+
+    [Fact]
     public async Task TryGetLogsForTraceAsync_UsesTraceFilter()
     {
         const string traceId = "0123456789abcdef0123456789abcdef";

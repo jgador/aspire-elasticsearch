@@ -71,7 +71,7 @@
           }
         },
         "labels": {
-          "type": "object"
+          "type": "flattened"
         }
       }
     }

@@ -92,7 +92,7 @@ public class ElasticsearchLogReaderTests
     }
 
     [Fact]
-    public async Task TryGetLogsAsync_CustomLabelEqualsFilter_WritesLabelKeywordField()
+    public async Task TryGetLogsAsync_CustomLabelEqualsFilter_WritesFlattenedLabelField()
     {
         var invoker = ElasticsearchTestHelpers.CreateInvoker(
             ElasticsearchTestHelpers.CreateSearchResponseJson(totalItemCount: 0));
@@ -116,8 +116,38 @@ public class ElasticsearchLogReaderTests
         }, CancellationToken.None);
 
         var request = Assert.Single(invoker.Requests);
-        Assert.Contains("\"labels.OrderId.keyword\"", request.Body);
+        Assert.Contains("\"labels.OrderId\"", request.Body);
         Assert.Contains("\"1234\"", request.Body);
+    }
+
+    [Fact]
+    public async Task TryGetLogsAsync_CustomLabelContainsFilter_WritesFlattenedLabelQueryString()
+    {
+        var invoker = ElasticsearchTestHelpers.CreateInvoker(
+            ElasticsearchTestHelpers.CreateSearchResponseJson(totalItemCount: 0));
+
+        var reader = ElasticsearchTestHelpers.CreateReader(invoker);
+
+        await reader.TryGetLogsAsync(new GetLogsContext
+        {
+            ResourceKey = null,
+            StartIndex = 0,
+            Count = 10,
+            Filters =
+            [
+                new FieldTelemetryFilter
+                {
+                    Field = "OrderId",
+                    Condition = FilterCondition.Contains,
+                    Value = "12 34"
+                }
+            ]
+        }, CancellationToken.None);
+
+        var request = Assert.Single(invoker.Requests);
+        Assert.Contains("\"query_string\"", request.Body);
+        Assert.Contains("\"default_field\":\"labels.OrderId\"", request.Body);
+        Assert.Contains("\"query\":\"*12\\\\ 34*\"", request.Body);
     }
 
     [Fact]

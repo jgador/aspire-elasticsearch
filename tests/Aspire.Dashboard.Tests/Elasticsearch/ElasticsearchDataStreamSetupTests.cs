@@ -40,10 +40,13 @@ public class ElasticsearchDataStreamSetupTests
             },
             request =>
             {
+                var normalizedBody = NormalizeJsonForContains(request.Body);
+
                 Assert.Equal("PUT", request.Method);
                 Assert.Equal("/_component_template/aspire-logs-mappings", request.PathAndQuery);
-                Assert.Contains("\"@timestamp\"", request.Body);
-                Assert.Contains("\"service.name\"", request.Body);
+                Assert.Contains("\"@timestamp\"", normalizedBody);
+                Assert.Contains("\"service.name\"", normalizedBody);
+                Assert.Contains("\"labels\":{\"type\":\"flattened\"}", normalizedBody);
             },
             request =>
             {
