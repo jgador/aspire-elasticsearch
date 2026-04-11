@@ -5,7 +5,8 @@
 # from source to include custom changes (e.g., Elasticsearch log persistence).
 #
 # Build:
-#   docker build -f Dockerfile.dashboard -t jessegador/aspire-dashboard:latest .
+#   docker build -f Dockerfile.dashboard -t jessegador/aspire-dashboard:13.3.0-preview.1-elastic .
+#   Update the tag when the Aspire Dashboard repo version in eng/Versions.props changes.
 #
 # Run:
 #   # For local kubectl port-forward on the host machine, use host.docker.internal.
@@ -17,7 +18,7 @@
 #     -e ASPIRE_DASHBOARD_ELASTICSEARCH_ENDPOINT=http://host.docker.internal:9200 `
 #     -e ASPIRE_DASHBOARD_ELASTICSEARCH_USERNAME=elastic `
 #     -e ASPIRE_DASHBOARD_ELASTICSEARCH_PASSWORD=replace-with-elastic-password `
-#     jessegador/aspire-dashboard:latest
+#     jessegador/aspire-dashboard:13.3.0-preview.1-elastic
 # ---------------------------------------------------------------
 
 # Stage 1: Build
