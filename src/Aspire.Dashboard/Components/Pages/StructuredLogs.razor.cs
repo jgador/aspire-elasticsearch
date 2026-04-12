@@ -198,14 +198,18 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
         {
             ViewModel.AddFilter(new FieldTelemetryFilter
             {
-                Field = KnownStructuredLogFields.TraceIdField, Condition = FilterCondition.Equals, Value = TraceId
+                Field = KnownStructuredLogFields.TraceIdField,
+                Condition = FilterCondition.Equals,
+                Value = TraceId
             });
         }
         if (!string.IsNullOrEmpty(SpanId))
         {
             ViewModel.AddFilter(new FieldTelemetryFilter
             {
-                Field = KnownStructuredLogFields.SpanIdField, Condition = FilterCondition.Equals, Value = SpanId
+                Field = KnownStructuredLogFields.SpanIdField,
+                Condition = FilterCondition.Equals,
+                Value = SpanId
             });
         }
 
