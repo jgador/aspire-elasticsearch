@@ -156,6 +156,27 @@
   <data name="StructuredLogsMessageFilter" xml:space="preserve">
     <value>Message filter</value>
   </data>
+  <data name="StructuredLogsTimeRange" xml:space="preserve">
+    <value>Time range</value>
+  </data>
+  <data name="StructuredLogsSelectTimeRange" xml:space="preserve">
+    <value>Select a time range</value>
+  </data>
+  <data name="StructuredLogsCustomTimeRange" xml:space="preserve">
+    <value>Custom</value>
+  </data>
+  <data name="StructuredLogsCustomTimeRangeValue" xml:space="preserve">
+    <value>Custom time range value</value>
+  </data>
+  <data name="StructuredLogsCustomTimeRangeUnit" xml:space="preserve">
+    <value>Custom time range unit</value>
+  </data>
+  <data name="StructuredLogsCustomTimeRangeMinutes" xml:space="preserve">
+    <value>Minutes</value>
+  </data>
+  <data name="StructuredLogsCustomTimeRangeHours" xml:space="preserve">
+    <value>Hours</value>
+  </data>
   <data name="StructuredLogsLevels" xml:space="preserve">
     <value>Level</value>
   </data>

@@ -50,6 +50,7 @@
   <Target Name="ReturnPackageVersion" Returns="$(PackageVersion)" />
 
   <ItemGroup>
+    <PackageReference Include="Elastic.Clients.Elasticsearch" />
     <PackageReference Include="Grpc.AspNetCore" />
     <PackageReference Include="Humanizer.Core" />
     <PackageReference Include="Microsoft.Extensions.AI" />
@@ -327,6 +328,13 @@
     <Compile Include="$(SharedDir)Otlp\Serialization\ResourceInfoJson.cs" Link="Otlp\Model\Serialization\ResourceInfoJson.cs" />
     <Compile Include="$(SharedDir)Export\ExportArchive.cs" Link="Export\ExportArchive.cs" />
     <Compile Include="$(SharedDir)ConsoleLogs\LogEntrySerializer.cs" Link="ConsoleLogs\LogEntrySerializer.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Otlp\Storage\Elasticsearch\Assets\**\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,11 @@
+{
+  "composed_of": [
+    "__ELASTICSEARCH_SETTINGS_COMPONENT_TEMPLATE_NAME__",
+    "__ELASTICSEARCH_MAPPING_COMPONENT_TEMPLATE_NAME__"
+  ],
+  "data_stream": {},
+  "index_patterns": [
+    "__ELASTICSEARCH_DATA_STREAM_NAME__*"
+  ],
+  "priority": 500
+}

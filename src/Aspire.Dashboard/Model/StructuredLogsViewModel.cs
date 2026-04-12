@@ -2,16 +2,22 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using Aspire.Dashboard.Model.GenAI;
 using Aspire.Dashboard.Model.Otlp;
 using Aspire.Dashboard.Otlp.Model;
 using Aspire.Dashboard.Otlp.Storage;
+using Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 
 namespace Aspire.Dashboard.Model;
 
 public class StructuredLogsViewModel
 {
+    private static readonly CancellationToken s_noCancellation = CancellationToken.None;
+
     private readonly TelemetryRepository _telemetryRepository;
+    private readonly ElasticsearchLogsService? _elasticsearchLogsService;
+    private readonly BrowserTimeProvider _timeProvider;
     private readonly List<FieldTelemetryFilter> _filters = new();
     // Cache span lookups for GenAI attributes to avoid repeated lookups.
     private readonly ConcurrentDictionary<SpanKey, bool> _spanGenAICache = new();
@@ -22,16 +28,38 @@ public class StructuredLogsViewModel
     private int _logsStartIndex;
     private int _logsCount;
     private LogLevel? _logLevel;
+    private TimeSpan _duration = DefaultDuration;
     private bool _currentDataHasErrors;
 
-    public StructuredLogsViewModel(TelemetryRepository telemetryRepository)
+    public static readonly TimeSpan DefaultDuration = TimeSpan.FromMinutes(15);
+
+    public StructuredLogsViewModel(TelemetryRepository telemetryRepository, BrowserTimeProvider timeProvider)
+        : this(telemetryRepository, timeProvider, elasticsearchLogsService: null)
+    {
+    }
+
+    public StructuredLogsViewModel(
+        TelemetryRepository telemetryRepository,
+        BrowserTimeProvider timeProvider,
+        IServiceProvider serviceProvider)
+        : this(telemetryRepository, timeProvider, ResolveElasticsearchLogsService(serviceProvider))
+    {
+    }
+
+    internal StructuredLogsViewModel(
+        TelemetryRepository telemetryRepository,
+        BrowserTimeProvider timeProvider,
+        ElasticsearchLogsService? elasticsearchLogsService)
     {
         _telemetryRepository = telemetryRepository;
+        _elasticsearchLogsService = elasticsearchLogsService;
+        _timeProvider = timeProvider;
     }
 
     public ResourceKey? ResourceKey { get => _resourceKey; set => SetValue(ref _resourceKey, value); }
     public string FilterText { get => _filterText; set => SetValue(ref _filterText, value); }
     public IReadOnlyList<FieldTelemetryFilter> Filters => _filters;
+    public bool HasElasticsearchLogsService => _elasticsearchLogsService is not null;
 
     public bool HasGenAISpan(string traceId, string spanId)
     {
@@ -94,6 +122,7 @@ public class StructuredLogsViewModel
     public int StartIndex { get => _logsStartIndex; set => SetValue(ref _logsStartIndex, value); }
     public int Count { get => _logsCount; set => SetValue(ref _logsCount, value); }
     public LogLevel? LogLevel { get => _logLevel; set => SetValue(ref _logLevel, value); }
+    public TimeSpan Duration { get => _duration; set => SetValue(ref _duration, value); }
 
     private void SetValue<T>(ref T field, T value)
     {
@@ -112,14 +141,15 @@ public class StructuredLogsViewModel
         if (logs == null)
         {
             var filters = GetFilters();
-
-            logs = _telemetryRepository.GetLogs(new GetLogsContext
+            var context = new GetLogsContext
             {
                 ResourceKey = ResourceKey,
                 StartIndex = StartIndex,
                 Count = Count,
                 Filters = filters
-            });
+            };
+
+            logs = TryGetLogsFromElasticsearch(context) ?? _telemetryRepository.GetLogs(context);
 
             _currentDataHasErrors = logs.Items.Any(i => i.Severity >= Microsoft.Extensions.Logging.LogLevel.Error);
         }
@@ -130,6 +160,14 @@ public class StructuredLogsViewModel
     public List<TelemetryFilter> GetFilters()
     {
         var filters = Filters.Cast<TelemetryFilter>().ToList();
+        var cutoff = _timeProvider.GetUtcNow().UtcDateTime.Subtract(Duration);
+        filters.Add(new FieldTelemetryFilter
+        {
+            Field = nameof(OtlpLogEntry.TimeStamp),
+            Condition = FilterCondition.GreaterThanOrEqual,
+            Value = cutoff.ToString("O", CultureInfo.InvariantCulture)
+        });
+
         if (!string.IsNullOrWhiteSpace(FilterText))
         {
             filters.Add(new FieldTelemetryFilter { Field = nameof(OtlpLogEntry.Message), Condition = FilterCondition.Contains, Value = FilterText });
@@ -152,15 +190,35 @@ public class StructuredLogsViewModel
         filters.RemoveAll(f => f is FieldTelemetryFilter fieldFilter && fieldFilter.Field == nameof(OtlpLogEntry.Severity));
         filters.Add(new FieldTelemetryFilter { Field = nameof(OtlpLogEntry.Severity), Condition = FilterCondition.GreaterThanOrEqual, Value = Microsoft.Extensions.Logging.LogLevel.Error.ToString() });
 
-        var errorLogs = _telemetryRepository.GetLogs(new GetLogsContext
+        var context = new GetLogsContext
         {
             ResourceKey = ResourceKey,
             StartIndex = 0,
             Count = count,
             Filters = filters
-        });
+        };
+
+        var errorLogs = TryGetLogsFromElasticsearch(context) ?? _telemetryRepository.GetLogs(context);
 
         return errorLogs;
+    }
+
+    public List<OtlpResource> GetResources()
+    {
+        return TryGetElasticsearchResult(service => service.TryGetResourcesAsync(s_noCancellation))
+            ?? _telemetryRepository.GetResources();
+    }
+
+    public List<string> GetLogPropertyKeys()
+    {
+        return TryGetElasticsearchResult(service => service.TryGetLogPropertyKeysAsync(ResourceKey, s_noCancellation))
+            ?? _telemetryRepository.GetLogPropertyKeys(ResourceKey);
+    }
+
+    public Dictionary<string, int> GetLogsFieldValues(string field)
+    {
+        return TryGetElasticsearchResult(service => service.TryGetLogsFieldValuesAsync(ResourceKey, field: field, cancellationToken: s_noCancellation))
+            ?? _telemetryRepository.GetLogsFieldValues(field);
     }
 
     public void ClearData()
@@ -169,5 +227,28 @@ public class StructuredLogsViewModel
 
         // Clear cache whenever log data changes to prevent it growing forever.
         _spanGenAICache.Clear();
+    }
+
+    private PagedResult<OtlpLogEntry>? TryGetLogsFromElasticsearch(GetLogsContext context)
+    {
+        return TryGetElasticsearchResult(service => service.TryGetLogsAsync(context, s_noCancellation));
+    }
+
+    private T? TryGetElasticsearchResult<T>(Func<ElasticsearchLogsService, Task<T?>> action)
+        where T : class
+    {
+        if (_elasticsearchLogsService is null)
+        {
+            return null;
+        }
+
+        return action(_elasticsearchLogsService).GetAwaiter().GetResult();
+    }
+
+    private static ElasticsearchLogsService? ResolveElasticsearchLogsService(IServiceProvider serviceProvider)
+    {
+        ArgumentNullException.ThrowIfNull(serviceProvider);
+
+        return serviceProvider.GetService<ElasticsearchLogsService>();
     }
 }

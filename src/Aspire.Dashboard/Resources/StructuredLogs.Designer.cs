@@ -150,6 +150,51 @@ namespace Aspire.Dashboard.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Custom.
+        /// </summary>
+        public static string StructuredLogsCustomTimeRange {
+            get {
+                return ResourceManager.GetString("StructuredLogsCustomTimeRange", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Hours.
+        /// </summary>
+        public static string StructuredLogsCustomTimeRangeHours {
+            get {
+                return ResourceManager.GetString("StructuredLogsCustomTimeRangeHours", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Minutes.
+        /// </summary>
+        public static string StructuredLogsCustomTimeRangeMinutes {
+            get {
+                return ResourceManager.GetString("StructuredLogsCustomTimeRangeMinutes", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Custom time range unit.
+        /// </summary>
+        public static string StructuredLogsCustomTimeRangeUnit {
+            get {
+                return ResourceManager.GetString("StructuredLogsCustomTimeRangeUnit", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Custom time range value.
+        /// </summary>
+        public static string StructuredLogsCustomTimeRangeValue {
+            get {
+                return ResourceManager.GetString("StructuredLogsCustomTimeRangeValue", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Minimum log level filter.
         /// </summary>
         public static string StructuredLogsMinimumLogFilter {
@@ -191,6 +236,24 @@ namespace Aspire.Dashboard.Resources {
         public static string StructuredLogsSelectMinimumLogLevel {
             get {
                 return ResourceManager.GetString("StructuredLogsSelectMinimumLogLevel", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Select a time range.
+        /// </summary>
+        public static string StructuredLogsSelectTimeRange {
+            get {
+                return ResourceManager.GetString("StructuredLogsSelectTimeRange", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Time range.
+        /// </summary>
+        public static string StructuredLogsTimeRange {
+            get {
+                return ResourceManager.GetString("StructuredLogsTimeRange", resourceCulture);
             }
         }
         

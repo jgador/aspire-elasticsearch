@@ -1,0 +1,39 @@
+# Exposes Elasticsearch and Kibana publicly after the base manifest is applied.
+# kubectl apply -f playground/ExternalServices/elasticsearch-kibana.yaml
+# kubectl apply -f playground/ExternalServices/elasticsearch-kibana.public.yaml
+# kubectl get svc -n default
+# kubectl delete -f playground/ExternalServices/elasticsearch-kibana.public.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-public
+  namespace: default
+  labels:
+    app.kubernetes.io/name: elasticsearch
+    app.kubernetes.io/part-of: aspire
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: elasticsearch
+  ports:
+    - name: http
+      port: 9200
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana-public
+  namespace: default
+  labels:
+    app.kubernetes.io/name: kibana
+    app.kubernetes.io/part-of: aspire
+spec:
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: kibana
+  ports:
+    - name: http
+      port: 5601
+      targetPort: http

@@ -53,6 +53,14 @@ public class DashboardUrlsTests
     }
 
     [Fact]
+    public void StructuredLogsUrl_Duration_AppendedToQueryString()
+    {
+        var url = DashboardUrls.StructuredLogsUrl(duration: 90);
+
+        Assert.Equal("/structuredlogs?duration=90", url);
+    }
+
+    [Fact]
     public void TracesUrl_HtmlValues_CorrectlyEscaped()
     {
         Assert.Equal($"/traces/resource/resource{PlaceholderAllCharactersEncoded}", DashboardUrls.TracesUrl(resource: $"resource{PlaceholderInput}"));
