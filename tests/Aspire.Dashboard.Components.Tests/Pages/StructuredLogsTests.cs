@@ -387,8 +387,8 @@ public partial class StructuredLogsTests : DashboardTestContext
         FluentUISetupHelpers.SetupFluentAnchoredRegion(this);
         FluentUISetupHelpers.SetupFluentTextField(this);
 
-        JSInterop.SetupVoid("initializeContinuousScroll");
-        JSInterop.SetupVoid("resetContinuousScrollPosition");
+        JSInterop.SetupVoid("initializeContinuousScroll", _ => true);
+        JSInterop.SetupVoid("resetContinuousScrollPosition", _ => true);
 
         FluentUISetupHelpers.AddCommonDashboardServices(this);
         Services.AddSingleton<ILogger<StructuredLogs>>(NullLogger<StructuredLogs>.Instance);

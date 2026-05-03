@@ -54,6 +54,7 @@ document.addEventListener("click", function (e) {
 
 let isScrolledToContent = false;
 let lastScrollHeight = null;
+let continuousScrollAnchor = "end";
 
 window.getIsScrolledToContent = function () {
     return isScrolledToContent;
@@ -66,15 +67,17 @@ window.setIsScrolledToContent = function (value) {
     }
 }
 
-window.resetContinuousScrollPosition = function () {
-    // Reset to scrolling to the end of the content after switching.
+window.resetContinuousScrollPosition = function (anchor) {
+    continuousScrollAnchor = anchor === "start" ? "start" : "end";
+
+    // Reset to scrolling to the anchored edge of the content after switching.
     setIsScrolledToContent(false);
 }
 
-window.initializeContinuousScroll = function () {
-    // Reset to scrolling to the end of the content when initializing.
+window.initializeContinuousScroll = function (anchor) {
+    // Reset to scrolling to the anchored edge of the content when initializing.
     // This needs to be called because the value is remembered across Aspire pages because the browser isn't reloading.
-    resetContinuousScrollPosition();
+    resetContinuousScrollPosition(anchor);
 
     const container = document.querySelector('.continuous-scroll-overflow');
     if (container == null) {
@@ -83,29 +86,29 @@ window.initializeContinuousScroll = function () {
 
     // The scroll event is used to detect when the user scrolls to view content.
     container.addEventListener('scroll', () => {
-        var atBottom = isScrolledToBottom(container);
-        if (atBottom === null) {
+        var atAnchor = isScrolledToAnchor(container);
+        if (atAnchor === null) {
             return;
         }
-        setIsScrolledToContent(!atBottom);
+        setIsScrolledToContent(!atAnchor);
    }, { passive: true });
 
     // The ResizeObserver reports changes in the grid size.
-    // This ensures that the logs are scrolled to the bottom when there are new logs
+    // This ensures that the logs are scrolled to the anchored edge when there are new logs
     // unless the user has scrolled to view content.
     const observer = new ResizeObserver(function () {
         lastScrollHeight = container.scrollHeight;
 
         if (lastScrollHeight == container.clientHeight) {
             // There is no scrollbar. This could be because there's no content, or the content might have been cleared.
-            // Reset to default behavior: scroll to bottom
+            // Reset to default behavior: scroll to the anchored edge.
             setIsScrolledToContent(false);
             return;
         }
 
         var isScrolledToContent = getIsScrolledToContent();
         if (!isScrolledToContent) {
-            container.scrollTop = lastScrollHeight;
+            scrollToContinuousScrollAnchor(container);
             return;
         }
     });
@@ -113,6 +116,18 @@ window.initializeContinuousScroll = function () {
         observer.observe(child);
     }
 };
+
+function scrollToContinuousScrollAnchor(container) {
+    container.scrollTop = continuousScrollAnchor === "start" ? 0 : container.scrollHeight;
+}
+
+function isScrolledToAnchor(container) {
+    if (continuousScrollAnchor === "start") {
+        return container.scrollTop < 5;
+    }
+
+    return isScrolledToBottom(container);
+}
 
 function isScrolledToBottom(container) {
     lastScrollHeight = lastScrollHeight || container.scrollHeight

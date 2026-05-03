@@ -17,6 +17,8 @@ namespace Aspire.Dashboard.Components;
 /// </summary>
 public sealed partial class LogViewer
 {
+    private const string ContinuousScrollAnchor = "start";
+
     private static readonly MarkupString s_spaceMarkup = new MarkupString("&#32;");
 
     private LogEntries? _logEntries;
@@ -93,21 +95,35 @@ public sealed partial class LogViewer
             return ValueTask.FromResult(new ItemsProviderResult<LogEntry>(Enumerable.Empty<LogEntry>(), 0));
         }
 
-        return ValueTask.FromResult(new ItemsProviderResult<LogEntry>(entries.Skip(r.StartIndex).Take(r.Count), entries.Count));
+        return ValueTask.FromResult(new ItemsProviderResult<LogEntry>(GetItemsFromNewest(entries, r.StartIndex, r.Count), entries.Count));
+    }
+
+    private static IEnumerable<LogEntry> GetItemsFromNewest(IList<LogEntry> entries, int startIndex, int count)
+    {
+        var index = entries.Count - startIndex - 1;
+        var remaining = count;
+
+        while (index >= 0 && remaining > 0)
+        {
+            yield return entries[index];
+
+            index--;
+            remaining--;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (_logsChanged)
         {
-            await JS.InvokeVoidAsync("resetContinuousScrollPosition");
+            await JS.InvokeVoidAsync("resetContinuousScrollPosition", ContinuousScrollAnchor);
             _logsChanged = false;
         }
         if (firstRender)
         {
             Logger.LogDebug("Initializing log viewer.");
 
-            await JS.InvokeVoidAsync("initializeContinuousScroll");
+            await JS.InvokeVoidAsync("initializeContinuousScroll", ContinuousScrollAnchor);
             DimensionManager.OnViewportInformationChanged += OnBrowserResize;
         }
     }
@@ -116,8 +132,8 @@ public sealed partial class LogViewer
     {
         InvokeAsync(async () =>
         {
-            await JS.InvokeVoidAsync("resetContinuousScrollPosition");
-            await JS.InvokeVoidAsync("initializeContinuousScroll");
+            await JS.InvokeVoidAsync("resetContinuousScrollPosition", ContinuousScrollAnchor);
+            await JS.InvokeVoidAsync("initializeContinuousScroll", ContinuousScrollAnchor);
         });
     }
 

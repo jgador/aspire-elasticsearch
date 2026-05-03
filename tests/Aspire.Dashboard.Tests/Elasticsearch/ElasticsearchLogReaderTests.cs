@@ -63,6 +63,27 @@ public class ElasticsearchLogReaderTests
     }
 
     [Fact]
+    public async Task TryGetLogsAsync_WritesDescendingTimestampSort()
+    {
+        var invoker = ElasticsearchTestHelpers.CreateInvoker(
+            ElasticsearchTestHelpers.CreateSearchResponseJson(totalItemCount: 0));
+
+        var reader = ElasticsearchTestHelpers.CreateReader(invoker);
+
+        await reader.TryGetLogsAsync(new GetLogsContext
+        {
+            ResourceKey = null,
+            StartIndex = 0,
+            Count = 10,
+            Filters = []
+        }, CancellationToken.None);
+
+        var request = Assert.Single(invoker.Requests);
+        Assert.Contains("\"@timestamp\"", request.Body);
+        Assert.Contains("\"order\":\"desc\"", request.Body);
+    }
+
+    [Fact]
     public async Task TryGetLogsAsync_MessageContainsFilter_WritesKeywordWildcardQuery()
     {
         var invoker = ElasticsearchTestHelpers.CreateInvoker(

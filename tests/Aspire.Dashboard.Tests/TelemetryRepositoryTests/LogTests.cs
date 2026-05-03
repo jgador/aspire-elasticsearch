@@ -179,18 +179,60 @@ public class LogTests
         Assert.Collection(logs.Items,
             l =>
             {
-                Assert.Equal("1", l.Message);
+                Assert.Equal("10", l.Message);
                 Assert.Same(OtlpScope.Empty, l.Scope);
             },
-            l => Assert.Equal("2", l.Message),
-            l => Assert.Equal("3", l.Message),
-            l => Assert.Equal("4", l.Message),
-            l => Assert.Equal("5", l.Message),
-            l => Assert.Equal("6", l.Message),
-            l => Assert.Equal("7", l.Message),
-            l => Assert.Equal("8", l.Message),
             l => Assert.Equal("9", l.Message),
-            l => Assert.Equal("10", l.Message));
+            l => Assert.Equal("8", l.Message),
+            l => Assert.Equal("7", l.Message),
+            l => Assert.Equal("6", l.Message),
+            l => Assert.Equal("5", l.Message),
+            l => Assert.Equal("4", l.Message),
+            l => Assert.Equal("3", l.Message),
+            l => Assert.Equal("2", l.Message),
+            l => Assert.Equal("1", l.Message));
+    }
+
+    [Fact]
+    public void GetLogs_ReturnsDescendingPage()
+    {
+        var repository = CreateRepository();
+
+        var addContext = new AddContext();
+        repository.AddLogs(addContext, new RepeatedField<ResourceLogs>()
+        {
+            new ResourceLogs
+            {
+                Resource = CreateResource(),
+                ScopeLogs =
+                {
+                    new ScopeLogs
+                    {
+                        LogRecords =
+                        {
+                            CreateLogRecord(time: s_testTime.AddMinutes(1), message: "1"),
+                            CreateLogRecord(time: s_testTime.AddMinutes(3), message: "3"),
+                            CreateLogRecord(time: s_testTime.AddMinutes(2), message: "2"),
+                            CreateLogRecord(time: s_testTime.AddMinutes(4), message: "4")
+                        }
+                    }
+                }
+            }
+        });
+
+        Assert.Equal(0, addContext.FailureCount);
+
+        var logs = repository.GetLogs(new GetLogsContext
+        {
+            ResourceKey = null,
+            StartIndex = 1,
+            Count = 2,
+            Filters = []
+        });
+
+        Assert.Collection(logs.Items,
+            l => Assert.Equal("3", l.Message),
+            l => Assert.Equal("2", l.Message));
     }
 
     [Fact]
@@ -1030,17 +1072,6 @@ public class LogTests
         Assert.Collection(logs.Items,
             resource =>
             {
-                Assert.Equal("message-1", resource.Message);
-                Assert.Equal("TestLogger", resource.Scope.Name);
-                Assert.Collection(resource.Attributes,
-                    p =>
-                    {
-                        Assert.Equal("key-1", p.Key);
-                        Assert.Equal("value-1", p.Value);
-                    });
-            },
-            resource =>
-            {
                 Assert.Equal("message-2", resource.Message);
                 Assert.Equal("TestLogger", resource.Scope.Name);
                 Assert.Collection(resource.Attributes,
@@ -1048,6 +1079,17 @@ public class LogTests
                     {
                         Assert.Equal("key-2", p.Key);
                         Assert.Equal("value-2", p.Value);
+                    });
+            },
+            resource =>
+            {
+                Assert.Equal("message-1", resource.Message);
+                Assert.Equal("TestLogger", resource.Scope.Name);
+                Assert.Collection(resource.Attributes,
+                    p =>
+                    {
+                        Assert.Equal("key-1", p.Key);
+                        Assert.Equal("value-1", p.Value);
                     });
             });
 
@@ -1186,12 +1228,12 @@ public class LogTests
         Assert.Collection(logs.Items,
                     resource =>
                     {
-                        Assert.Equal("message-2", resource.Message);
+                        Assert.Equal("message-3", resource.Message);
                         Assert.Equal("TestLogger", resource.Scope.Name);
                     },
                     resource =>
                     {
-                        Assert.Equal("message-3", resource.Message);
+                        Assert.Equal("message-2", resource.Message);
                         Assert.Equal("TestLogger", resource.Scope.Name);
                     });
     }

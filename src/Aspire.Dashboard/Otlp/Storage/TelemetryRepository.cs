@@ -446,6 +446,10 @@ public sealed partial class TelemetryRepository : IDisposable
                 results = filter.Apply(results);
             }
 
+            results = results
+                .OrderByDescending(l => l.TimeStamp)
+                .ThenByDescending(l => l.InternalId);
+
             return OtlpHelpers.GetItems(results, context.StartIndex, context.Count, _logs.IsFull);
         }
         finally

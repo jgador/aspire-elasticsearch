@@ -33,6 +33,7 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
     private const string MessageColumn = nameof(MessageColumn);
     private const string TraceColumn = nameof(TraceColumn);
     private const string ActionsColumn = nameof(ActionsColumn);
+    private const string ContinuousScrollAnchor = "start";
 
     private SelectViewModel<ResourceTypeDetails> _allResource = default!;
 
@@ -639,12 +640,12 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
 
         if (_resourceChanged)
         {
-            await JS.InvokeVoidAsync("resetContinuousScrollPosition");
+            await JS.InvokeVoidAsync("resetContinuousScrollPosition", ContinuousScrollAnchor);
             _resourceChanged = false;
         }
         if (firstRender)
         {
-            await JS.InvokeVoidAsync("initializeContinuousScroll");
+            await JS.InvokeVoidAsync("initializeContinuousScroll", ContinuousScrollAnchor);
             DimensionManager.OnViewportInformationChanged += OnBrowserResize;
         }
     }
@@ -653,8 +654,8 @@ public partial class StructuredLogs : IComponentWithTelemetry, IPageWithSessionA
     {
         InvokeAsync(async () =>
         {
-            await JS.InvokeVoidAsync("resetContinuousScrollPosition");
-            await JS.InvokeVoidAsync("initializeContinuousScroll");
+            await JS.InvokeVoidAsync("resetContinuousScrollPosition", ContinuousScrollAnchor);
+            await JS.InvokeVoidAsync("initializeContinuousScroll", ContinuousScrollAnchor);
         });
     }
 
