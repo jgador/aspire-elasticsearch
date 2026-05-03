@@ -12,8 +12,11 @@ namespace Aspire.Dashboard.Otlp.Storage.Elasticsearch;
 
 internal sealed class ElasticsearchLogMapper
 {
+    private const string ServiceVersionAttributeName = "service.version";
+
     private readonly OtlpContext _otlpContext;
-    private readonly Dictionary<ResourceKey, OtlpResourceView> _resourceViews = new();
+    private readonly Dictionary<ResourceKey, OtlpResource> _resources = new();
+    private readonly Dictionary<ResourceViewKey, OtlpResourceView> _resourceViews = new();
     private readonly Dictionary<string, OtlpScope> _scopes = new(StringComparer.Ordinal);
 
     public ElasticsearchLogMapper(OtlpContext otlpContext)
@@ -36,6 +39,7 @@ internal sealed class ElasticsearchLogMapper
             ParentId = NullIfEmpty(logEntry.ParentId),
             ServiceName = logEntry.ResourceView.Resource.ResourceName,
             ServiceInstanceId = logEntry.ResourceView.ResourceKey.InstanceId,
+            ServiceVersion = NullIfEmpty(logEntry.ResourceView.Properties.GetValue(ServiceVersionAttributeName)),
             EventName = logEntry.EventName,
             Flags = logEntry.Flags
         };
@@ -76,15 +80,23 @@ internal sealed class ElasticsearchLogMapper
     public OtlpLogEntry ToLogEntry(ElasticsearchLogDocument document)
     {
         var resourceKey = new ResourceKey(document.ServiceName ?? string.Empty, document.ServiceInstanceId);
-        if (!_resourceViews.TryGetValue(resourceKey, out var resourceView))
-        {
-            var resource = new OtlpResource(resourceKey.Name, resourceKey.InstanceId, uninstrumentedPeer: false, _otlpContext)
-            {
-                HasLogs = true
-            };
+        var serviceVersion = NullIfEmpty(document.ServiceVersion);
+        var resourceViewKey = new ResourceViewKey(resourceKey, serviceVersion);
 
-            resourceView = new OtlpResourceView(resource, new RepeatedField<KeyValue>());
-            _resourceViews.Add(resourceKey, resourceView);
+        if (!_resourceViews.TryGetValue(resourceViewKey, out var resourceView))
+        {
+            if (!_resources.TryGetValue(resourceKey, out var resource))
+            {
+                resource = new OtlpResource(resourceKey.Name, resourceKey.InstanceId, uninstrumentedPeer: false, _otlpContext)
+                {
+                    HasLogs = true
+                };
+
+                _resources.Add(resourceKey, resource);
+            }
+
+            resourceView = new OtlpResourceView(resource, CreateResourceAttributes(serviceVersion));
+            _resourceViews.Add(resourceViewKey, resourceView);
         }
 
         var scopeName = document.LoggerName ?? string.Empty;
@@ -148,6 +160,18 @@ internal sealed class ElasticsearchLogMapper
         }
 
         return logRecord;
+    }
+
+    private static RepeatedField<KeyValue> CreateResourceAttributes(string? serviceVersion)
+    {
+        var attributes = new RepeatedField<KeyValue>();
+
+        if (!string.IsNullOrEmpty(serviceVersion))
+        {
+            attributes.Add(CreateAttribute(ServiceVersionAttributeName, serviceVersion));
+        }
+
+        return attributes;
     }
 
     private static KeyValuePair<string, string>[] BuildAttributes(ElasticsearchLogDocument document)
@@ -227,7 +251,7 @@ internal sealed class ElasticsearchLogMapper
         };
     }
 
-    private static string? NullIfEmpty(string value)
+    private static string? NullIfEmpty(string? value)
     {
         return string.IsNullOrEmpty(value) ? null : value;
     }
@@ -255,4 +279,6 @@ internal sealed class ElasticsearchLogMapper
         value = ByteString.Empty;
         return false;
     }
+
+    private readonly record struct ResourceViewKey(ResourceKey ResourceKey, string? ServiceVersion);
 }

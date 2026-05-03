@@ -241,7 +241,8 @@ internal static class ElasticsearchTestHelpers
         int severityNumber = 9,
         string? loggerName = "Orders.Logger",
         string? traceId = "0123456789abcdef0123456789abcdef",
-        string? spanId = "0123456789abcdef")
+        string? spanId = "0123456789abcdef",
+        string? serviceVersion = null)
     {
         return new ElasticsearchLogDocument
         {
@@ -253,7 +254,8 @@ internal static class ElasticsearchTestHelpers
             TraceId = traceId,
             SpanId = spanId,
             ServiceName = serviceName,
-            ServiceInstanceId = serviceInstanceId
+            ServiceInstanceId = serviceInstanceId,
+            ServiceVersion = serviceVersion
         };
     }
 

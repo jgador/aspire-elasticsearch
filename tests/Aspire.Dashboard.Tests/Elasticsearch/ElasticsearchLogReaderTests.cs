@@ -39,7 +39,8 @@ public class ElasticsearchLogReaderTests
                         severityNumber: 17,
                         loggerName: "Checkout.Logger",
                         traceId: "0123456789abcdef0123456789abcdef",
-                        spanId: "0123456789abcdef")
+                        spanId: "0123456789abcdef",
+                        serviceVersion: "1.2.3")
                 ],
                 totalItemCount: 1));
 
@@ -60,6 +61,7 @@ public class ElasticsearchLogReaderTests
         Assert.Equal("Checkout.Logger", log.Scope.Name);
         Assert.Equal("checkout", log.ResourceView.Resource.ResourceName);
         Assert.Equal("instance-a", log.ResourceView.ResourceKey.InstanceId);
+        Assert.Contains(log.ResourceView.Properties, p => p.Key == "service.version" && p.Value == "1.2.3");
     }
 
     [Fact]
@@ -139,6 +141,36 @@ public class ElasticsearchLogReaderTests
         var request = Assert.Single(invoker.Requests);
         Assert.Contains("\"labels.OrderId\"", request.Body);
         Assert.Contains("\"1234\"", request.Body);
+    }
+
+    [Fact]
+    public async Task TryGetLogsAsync_ServiceVersionEqualsFilter_WritesServiceVersionField()
+    {
+        var invoker = ElasticsearchTestHelpers.CreateInvoker(
+            ElasticsearchTestHelpers.CreateSearchResponseJson(totalItemCount: 0));
+
+        var reader = ElasticsearchTestHelpers.CreateReader(invoker);
+
+        await reader.TryGetLogsAsync(new GetLogsContext
+        {
+            ResourceKey = null,
+            StartIndex = 0,
+            Count = 10,
+            Filters =
+            [
+                new FieldTelemetryFilter
+                {
+                    Field = "service.version",
+                    Condition = FilterCondition.Equals,
+                    Value = "1.2.3"
+                }
+            ]
+        }, CancellationToken.None);
+
+        var request = Assert.Single(invoker.Requests);
+        Assert.Contains("\"service.version\"", request.Body);
+        Assert.Contains("\"1.2.3\"", request.Body);
+        Assert.DoesNotContain("\"labels.service.version\"", request.Body);
     }
 
     [Fact]

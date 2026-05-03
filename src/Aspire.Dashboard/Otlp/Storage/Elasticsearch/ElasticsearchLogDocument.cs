@@ -78,6 +78,12 @@ public sealed class ElasticsearchLogDocument
     public string? ServiceInstanceId { get; set; }
 
     /// <summary>
+    /// Gets or sets the version of the service that produced this log entry.
+    /// </summary>
+    [JsonPropertyName("service.version")]
+    public string? ServiceVersion { get; set; }
+
+    /// <summary>
     /// Gets or sets the event name, if this log entry represents a named event.
     /// </summary>
     [JsonPropertyName("event.name")]

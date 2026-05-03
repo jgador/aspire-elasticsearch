@@ -40,17 +40,16 @@ public class ElasticsearchLogMapperTests
     [Fact]
     public void ToDocument_MapsResourceFields()
     {
-        // Arrange
         var logEntry = CreateTestLogEntry(
             resourceName: "MyService",
-            resourceInstanceId: "instance-1");
+            resourceInstanceId: "instance-1",
+            resourceAttributes: [new("service.version", "1.2.3")]);
 
-        // Act
         var doc = ElasticsearchLogMapper.ToDocument(logEntry);
 
-        // Assert
         Assert.Equal("MyService", doc.ServiceName);
         Assert.Equal("instance-1", doc.ServiceInstanceId);
+        Assert.Equal("1.2.3", doc.ServiceVersion);
     }
 
     [Fact]
@@ -210,6 +209,7 @@ public class ElasticsearchLogMapperTests
             ParentId = "parent-1",
             ServiceName = "MyService",
             ServiceInstanceId = "instance-1",
+            ServiceVersion = "1.2.3",
             EventName = "OrderCreated",
             OriginalFormat = "Order {OrderId} created",
             Flags = 123
@@ -230,6 +230,7 @@ public class ElasticsearchLogMapperTests
         Assert.Equal("parent-1", logEntry.ParentId);
         Assert.Equal("MyService", logEntry.ResourceView.Resource.ResourceName);
         Assert.Equal("instance-1", logEntry.ResourceView.ResourceKey.InstanceId);
+        Assert.Contains(logEntry.ResourceView.Properties, p => p.Key == "service.version" && p.Value == "1.2.3");
         Assert.Equal("OrderCreated", logEntry.EventName);
         Assert.Equal("Order {OrderId} created", logEntry.OriginalFormat);
         Assert.Equal((uint)123, logEntry.Flags);
@@ -324,6 +325,42 @@ public class ElasticsearchLogMapperTests
         Assert.Same(firstLogEntry.Scope, secondLogEntry.Scope);
     }
 
+    [Fact]
+    public void ToLogEntry_UsesDifferentResourceViewsForDifferentServiceVersions()
+    {
+        var mapper = CreateMapper();
+        var first = new ElasticsearchLogDocument
+        {
+            Timestamp = s_testTime,
+            Message = "first",
+            LogLevel = "Information",
+            SeverityNumber = (int)SeverityNumber.Info,
+            LoggerName = "SharedLogger",
+            ServiceName = "SharedService",
+            ServiceInstanceId = "instance-1",
+            ServiceVersion = "1.0.0"
+        };
+        var second = new ElasticsearchLogDocument
+        {
+            Timestamp = s_testTime.AddSeconds(1),
+            Message = "second",
+            LogLevel = "Information",
+            SeverityNumber = (int)SeverityNumber.Info,
+            LoggerName = "SharedLogger",
+            ServiceName = "SharedService",
+            ServiceInstanceId = "instance-1",
+            ServiceVersion = "2.0.0"
+        };
+
+        var firstLogEntry = mapper.ToLogEntry(first);
+        var secondLogEntry = mapper.ToLogEntry(second);
+
+        Assert.NotSame(firstLogEntry.ResourceView, secondLogEntry.ResourceView);
+        Assert.Same(firstLogEntry.ResourceView.Resource, secondLogEntry.ResourceView.Resource);
+        Assert.Contains(firstLogEntry.ResourceView.Properties, p => p.Key == "service.version" && p.Value == "1.0.0");
+        Assert.Contains(secondLogEntry.ResourceView.Properties, p => p.Key == "service.version" && p.Value == "2.0.0");
+    }
+
     private static OtlpLogEntry CreateTestLogEntry(
         DateTime? time = null,
         string? message = null,
@@ -334,7 +371,8 @@ public class ElasticsearchLogMapperTests
         string? traceId = null,
         string? spanId = null,
         string? eventName = null,
-        IEnumerable<KeyValuePair<string, string>>? attributes = null)
+        IEnumerable<KeyValuePair<string, string>>? attributes = null,
+        IEnumerable<KeyValuePair<string, string>>? resourceAttributes = null)
     {
         var context = new OtlpContext
         {
@@ -347,7 +385,7 @@ public class ElasticsearchLogMapperTests
             resourceInstanceId ?? "TestId",
             uninstrumentedPeer: false,
             context);
-        var resourceView = new OtlpResourceView(resource, new RepeatedField<KeyValue>());
+        var resourceView = new OtlpResourceView(resource, CreateResourceAttributes(resourceAttributes));
         var scope = CreateOtlpScope(context, scopeName ?? "TestLogger");
 
         var logRecord = CreateLogRecord(
@@ -360,6 +398,21 @@ public class ElasticsearchLogMapperTests
             eventName: eventName);
 
         return new OtlpLogEntry(logRecord, resourceView, scope, context);
+    }
+
+    private static RepeatedField<KeyValue> CreateResourceAttributes(IEnumerable<KeyValuePair<string, string>>? attributes)
+    {
+        var resourceAttributes = new RepeatedField<KeyValue>();
+
+        if (attributes is not null)
+        {
+            foreach (var attribute in attributes)
+            {
+                resourceAttributes.Add(new KeyValue { Key = attribute.Key, Value = new AnyValue { StringValue = attribute.Value } });
+            }
+        }
+
+        return resourceAttributes;
     }
 
     private static ElasticsearchLogMapper CreateMapper()

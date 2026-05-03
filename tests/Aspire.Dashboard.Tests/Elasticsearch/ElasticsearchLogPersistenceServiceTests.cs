@@ -23,7 +23,10 @@ public class ElasticsearchLogPersistenceServiceTests
         {
             new ResourceLogs
             {
-                Resource = CreateResource(name: "service1", instanceId: "inst1"),
+                Resource = CreateResource(
+                    name: "service1",
+                    instanceId: "inst1",
+                    attributes: [new("service.version", "1.2.3")]),
                 ScopeLogs =
                 {
                     new ScopeLogs
@@ -100,6 +103,8 @@ public class ElasticsearchLogPersistenceServiceTests
                 Assert.EndsWith("_bulk", request.PathAndQuery, StringComparison.Ordinal);
                 Assert.Contains("\"message\":\"delayed log\"", request.Body);
                 Assert.Contains("\"service.name\":\"service1\"", request.Body);
+                Assert.Contains("\"service.instance.id\":\"inst1\"", request.Body);
+                Assert.Contains("\"service.version\":\"1.2.3\"", request.Body);
             });
     }
 }

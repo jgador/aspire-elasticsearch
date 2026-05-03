@@ -45,7 +45,9 @@ public class ElasticsearchDataStreamSetupTests
                 Assert.Equal("PUT", request.Method);
                 Assert.Equal("/_component_template/aspire-logs-mappings", request.PathAndQuery);
                 Assert.Contains("\"@timestamp\"", normalizedBody);
-                Assert.Contains("\"service.name\"", normalizedBody);
+                Assert.Contains("\"service.name\":{\"type\":\"keyword\"}", normalizedBody);
+                Assert.Contains("\"service.instance.id\":{\"type\":\"keyword\"}", normalizedBody);
+                Assert.Contains("\"service.version\":{\"type\":\"keyword\"}", normalizedBody);
                 Assert.Contains("\"labels\":{\"type\":\"flattened\"}", normalizedBody);
             },
             request =>
