@@ -371,6 +371,37 @@ public partial class ConsoleLogsTests : DashboardTestContext
     }
 
     [Fact]
+    public void LogViewer_DisplaysNewestEntriesFirst()
+    {
+        SetupConsoleLogsServices();
+
+        var logParser = new LogParser(ConsoleColor.Black, encodeForHtml: true);
+        var logEntries = new LogEntries(maximumEntryCount: int.MaxValue)
+        {
+            BaseLineNumber = 1
+        };
+
+        logEntries.InsertSorted(logParser.CreateLogEntry("2025-01-15T10:30:00Z Oldest", isErrorOutput: false, resourcePrefix: null));
+        logEntries.InsertSorted(logParser.CreateLogEntry("2025-01-15T10:30:02Z Newest", isErrorOutput: false, resourcePrefix: null));
+        logEntries.InsertSorted(logParser.CreateLogEntry("2025-01-15T10:30:01Z Middle", isErrorOutput: false, resourcePrefix: null));
+
+        var cut = RenderComponent<LogViewer>(builder =>
+        {
+            builder.Add(p => p.LogEntries, logEntries);
+        });
+
+        cut.WaitForAssertion(() =>
+        {
+            var lines = cut.FindAll(".log-content").Select(e => e.TextContent.Trim()).ToList();
+
+            Assert.Equal(3, lines.Count);
+            Assert.Equal("Newest", lines[0]);
+            Assert.Equal("Middle", lines[1]);
+            Assert.Equal("Oldest", lines[2]);
+        });
+    }
+
+    [Fact]
     public async Task ReadingLogs_ErrorDuringRead_SetStatusAndLog()
     {
         // Arrange
@@ -842,8 +873,8 @@ public partial class ConsoleLogsTests : DashboardTestContext
         FluentUISetupHelpers.SetupFluentAnchoredRegion(this);
         FluentUISetupHelpers.SetupFluentToolbar(this);
 
-        JSInterop.SetupVoid("initializeContinuousScroll");
-        JSInterop.SetupVoid("resetContinuousScrollPosition");
+        JSInterop.SetupVoid("initializeContinuousScroll", _ => true);
+        JSInterop.SetupVoid("resetContinuousScrollPosition", _ => true);
 
         FluentUISetupHelpers.AddCommonDashboardServices(this, browserTimeProvider: timeProvider);
 

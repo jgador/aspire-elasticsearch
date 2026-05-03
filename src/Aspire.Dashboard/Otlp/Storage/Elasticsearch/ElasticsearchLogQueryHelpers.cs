@@ -69,7 +69,7 @@ internal static class ElasticsearchLogQueryHelpers
                     Field = new FieldSort
                     {
                         Field = TimestampFieldName,
-                        Order = SortOrder.Asc
+                        Order = SortOrder.Desc
                     }
                 }
             ]

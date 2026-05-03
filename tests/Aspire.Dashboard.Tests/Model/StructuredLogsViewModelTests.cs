@@ -63,6 +63,22 @@ public sealed class StructuredLogsViewModelTests
     }
 
     [Fact]
+    public void GetLogs_ReturnsNewestLogsFirst()
+    {
+        var repository = CreateRepository();
+        AddRepositoryLog(repository, message: "oldest", timestamp: s_logTimestamp);
+        AddRepositoryLog(repository, message: "newest", timestamp: s_logTimestamp.AddMinutes(1));
+
+        var viewModel = CreateViewModel(repository);
+
+        var logs = viewModel.GetLogs();
+
+        Assert.Collection(logs.Items,
+            l => Assert.Equal("newest", l.Message),
+            l => Assert.Equal("oldest", l.Message));
+    }
+
+    [Fact]
     public void GetResourcesAndMetadata_UseElasticsearchWhenAvailable()
     {
         var repository = CreateRepository();
@@ -229,7 +245,7 @@ public sealed class StructuredLogsViewModelTests
         return viewModel;
     }
 
-    private static void AddRepositoryLog(TelemetryRepository repository, string message, string resourceName = "repo-service")
+    private static void AddRepositoryLog(TelemetryRepository repository, string message, string resourceName = "repo-service", DateTime? timestamp = null)
     {
         var addContext = new AddContext();
         repository.AddLogs(addContext, new RepeatedField<ResourceLogs>
@@ -244,7 +260,7 @@ public sealed class StructuredLogsViewModelTests
                         Scope = CreateScope(name: "Repo.Logger"),
                         LogRecords =
                         {
-                            CreateLogRecord(time: s_logTimestamp, message: message)
+                            CreateLogRecord(time: timestamp ?? s_logTimestamp, message: message)
                         }
                     }
                 }
