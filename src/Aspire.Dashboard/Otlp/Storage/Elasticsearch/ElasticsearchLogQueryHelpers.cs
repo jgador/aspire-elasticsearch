@@ -34,6 +34,7 @@ internal static class ElasticsearchLogQueryHelpers
     public const string OriginalFormatFieldName = "log.original_format";
     public const string ServiceNameFieldName = "service.name";
     public const string ServiceInstanceIdFieldName = "service.instance.id";
+    public const string ServiceVersionFieldName = "service.version";
     public const string TraceIdFieldName = "trace.id";
     public const string SpanIdFieldName = "span.id";
     public const string ParentIdFieldName = "parent.id";
@@ -209,6 +210,9 @@ internal static class ElasticsearchLogQueryHelpers
                 return true;
             case KnownResourceFields.ServiceInstanceIdField:
                 resolvedField = CreateKeywordField(ServiceInstanceIdFieldName);
+                return true;
+            case ServiceVersionFieldName:
+                resolvedField = CreateKeywordField(ServiceVersionFieldName);
                 return true;
             case OtlpLogEntry.ExceptionTypeField:
                 resolvedField = CreateKeywordField(ErrorTypeFieldName);

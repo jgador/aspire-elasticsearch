@@ -46,6 +46,9 @@
         "service.instance.id": {
           "type": "keyword"
         },
+        "service.version": {
+          "type": "keyword"
+        },
         "event.name": {
           "type": "keyword"
         },
